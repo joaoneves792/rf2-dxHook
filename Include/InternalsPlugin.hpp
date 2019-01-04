@@ -27,7 +27,7 @@
 // This is not needed anymore since we have 64-bit builds of rF2 as well?
 // http://isiforums.net/f/showthread.php/20538-Plugins-code-pragma-pack(push-4)-not-needed-anymore
 //
-//#pragma pack( push, 4 )
+#pragma pack( push, 4 )
 
 //旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
 //� Version01 Structures                                                   �

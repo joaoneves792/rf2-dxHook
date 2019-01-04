@@ -11,11 +11,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #define _INTERNALS_EXAMPLE_H
 
 #include "InternalsPlugin.hpp"
-#include <assert.h>
-#include <math.h>               /* for rand() */
-#include <stdio.h>              /* for sample output */
-#include <d3dx9.h>              /* DirectX9 main header */
-#include <cmath>
+#include <d3d11.h>
 
 #define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
 #define DELTA_BEST_VERSION      "v24/Nola"
@@ -24,16 +20,11 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #if _WIN64
   #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
-  #define CONFIG_FILE           "Bin64\\Plugins\\DeltaBest.ini"
-  #define TEXTURE_BACKGROUND    "Bin64\\Plugins\\DeltaBestBackground.png"
 #else
   #define LOG_FILE              "Bin32\\Plugins\\DeltaBest.log"
-  #define CONFIG_FILE           "Bin32\\Plugins\\DeltaBest.ini"
-  #define TEXTURE_BACKGROUND    "Bin32\\Plugins\\DeltaBestBackground.png"
+
 #endif
 
-/* Maximum length of a track in meters */
-#define MAX_TRACK_LENGTH		100000
 
 #define DATA_PATH_FILE			"Core\\data.path"
 #define BEST_LAP_DIR			"%s\\Userdata\\player\\Settings\\DeltaBest"
@@ -61,6 +52,16 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
    faster updates to the delta time instead of every 0.2s that
    UpdateScoring() allows */
 #define DEFAULT_HIRES_UPDATES   1
+
+#ifndef SAFE_RELEASE
+#define SAFE_RELEASE(p)      { if (p) { (p)->Release(); (p)=NULL; } }
+#endif
+typedef BOOL        (WINAPI * LPD3DPERF_QUERYREPEATFRAME)(void);
+typedef VOID        (WINAPI * LPD3DPERF_SETOPTIONS)( DWORD dwOptions );
+typedef DWORD       (WINAPI * LPD3DPERF_GETSTATUS)( void );
+typedef HRESULT     (WINAPI * LPCREATEDXGIFACTORY)(REFIID, void ** );
+typedef HRESULT     (WINAPI * LPD3D11CREATEDEVICE)( IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT32, D3D_FEATURE_LEVEL*, UINT, UINT32, ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext** );
+
 
 
 /* Toggle plugin with CTRL + a magic key. Reference:
@@ -109,61 +110,16 @@ public:
     void UpdateHardware(const float fDT) { mET += fDT; }   // update the hardware with the time between frames
     void EnableHardware() { mEnabled = true; }             // message from game to enable hardware
     void DisableHardware() { mEnabled = false; }           // message from game to disable hardware
-
-    // See if the plugin wants to take over a hardware control.  If the plugin takes over the
-    // control, this method returns true and sets the value of the float pointed to by the
-    // second arg.  Otherwise, it returns false and leaves the float unmodified.
-    bool CheckHWControl(const char * const controlName, float &fRetVal);
-    bool ForceFeedback(float &forceValue) { return false; }
-
+	
     // SCORING OUTPUT
     bool WantsScoringUpdates() { return true; }
     void UpdateScoring(const ScoringInfoV01 &info);
 
-    // COMMENTARY INPUT
-    bool RequestCommentary(CommentaryRequestInfoV01 &info) { return false; }
-
-    // VIDEO EXPORT (sorry, no example code at this time)
-    virtual bool WantsVideoOutput() { return false; }
-    virtual bool VideoOpen(const char * const szFilename, float fQuality, unsigned short usFPS, unsigned long fBPS,
-        unsigned short usWidth, unsigned short usHeight, char *cpCodec = NULL) {
-            return(false);
-    } // open video output file
-    virtual void VideoClose() {}                                 // close video output file
-    virtual void VideoWriteAudio(const short *pAudio, unsigned int uNumFrames) {} // write some audio info
-    virtual void VideoWriteImage(const unsigned char *pImage) {} // write video image
-
-    // SCREEN NOTIFICATIONS
-
-    void InitScreen(const ScreenInfoV01 &info);                  // Now happens right after graphics device initialization
-    void UninitScreen(const ScreenInfoV01 &info);                // Now happens right before graphics device uninitialization
-
-    void DeactivateScreen(const ScreenInfoV01 &info);            // Window deactivation
-    void ReactivateScreen(const ScreenInfoV01 &info);            // Window reactivation
-
-    void RenderScreenBeforeOverlays(const ScreenInfoV01 &info);  // before rFactor overlays
-    void RenderScreenAfterOverlays(const ScreenInfoV01 &info);   // after rFactor overlays
-
-    void PreReset(const ScreenInfoV01 &info);					 // after detecting device lost but before resetting
-    void PostReset(const ScreenInfoV01 &info);					 // after resetting
-
-    void ThreadStarted(long type) {}                             // called just after a primary thread is started (type is 0=multimedia or 1=simulation)
-    void ThreadStopping(long type) {}                            // called just before a primary thread is stopped (type is 0=multimedia or 1=simulation)
-
 private:
-
-    double CalculateDeltaBest();
-    void DrawDeltaBar(const ScreenInfoV01 &info, double delta, double delta_diff);
-    void LoadConfig(struct PluginConfig &config, const char *ini_file);
-	const char * GetRF2DataPath();
-	const char * GetBestLapFileName(const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh);
-	void LoadBestLap(struct LapTime *lap, const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh);
-	bool SaveBestLap(const struct LapTime *lap, const ScoringInfoV01 &scoring, const VehicleScoringInfoV01 &veh);
-    bool NeedToDisplay();
-    void ResetLap(struct LapTime *lap);
     void WriteLog(const char * const msg);
-    D3DCOLOR TextColor(double delta);
-    D3DCOLOR BarColor(double delta, double delta_diff);
+	ID3D11Device* getDX11Device();
+	void CreateSearchDevice(ID3D11Device** device);
+	ID3D11Device* findDev(void* pvReplica, DWORD dwVTable);
 
     //
     // Current status
