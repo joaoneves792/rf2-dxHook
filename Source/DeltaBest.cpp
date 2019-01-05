@@ -298,18 +298,15 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain){
 		}		
 		DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 		ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
-		swapChainDesc.Width = 4;
-		swapChainDesc.Height = 4;
 		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		swapChainDesc.Stereo = false;
 		swapChainDesc.SampleDesc.Count = 1;
 		swapChainDesc.SampleDesc.Quality = 0;
-		swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		swapChainDesc.BufferUsage = DXGI_USAGE_BACK_BUFFER;
 		swapChainDesc.BufferCount = 1;
 		swapChainDesc.Scaling = DXGI_SCALING_NONE;
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-		swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_GDI_COMPATIBLE;
+		swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 
 		DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen;
 		ZeroMemory(&fullscreen, sizeof(fullscreen));
@@ -322,6 +319,7 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain){
 
 		pIDXGIFactory2->CreateSwapChainForHwnd(g_tempd3dDevice, g_HWND, &swapChainDesc, NULL, NULL, tempSwapChain);
 
+		SAFE_RELEASE(pDXGIDevice)
 		SAFE_RELEASE(pIDXGIFactory1)
 		SAFE_RELEASE(pIDXGIFactory2)
 		SAFE_RELEASE(pAdapter)
