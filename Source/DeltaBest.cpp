@@ -10,7 +10,13 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #include "DeltaBest.hpp"
 #include <d3d11.h>
+#include <dxgi1_2.h>
 #include <cstdio>
+
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "d3dx11.lib")
+
 
 // plugin information
 
@@ -39,9 +45,12 @@ FILE* out_file = NULL;
 bool g_realtime = false;
 bool g_messageDisplayed = false;
 
+HWND g_HWND = NULL;
+
+ID3D11Device* g_tempd3dDevice = NULL;
 ID3D11Device* g_d3dDevice = NULL;
-HMODULE g_d3d11 = NULL;
-LPD3D11CREATEDEVICE g_DynamicD3D11CreateDevice;
+IDXGISwapChain1* g_swapchain = NULL;
+ID3D11DeviceContext* g_context = NULL;
 
 /*
 // DirectX 9 objects, to render some text on screen
@@ -76,15 +85,6 @@ void DeltaBestPlugin::Startup(long version)
 #ifdef ENABLE_LOG
 	WriteLog("--STARTUP--");
 #endif 
-
-	g_d3d11 = LoadLibraryW(L"d3d11.dll" );
-	if( g_d3d11 != NULL )
-    {
-		g_DynamicD3D11CreateDevice = ( LPD3D11CREATEDEVICE )GetProcAddress( g_d3d11, "D3D11CreateDevice" );
-		if(g_DynamicD3D11CreateDevice)
-			WriteLog("Dynamic D11 create successfull");
-    }
-
 }
 
 void DeltaBestPlugin::StartSession()
@@ -128,69 +128,19 @@ void DeltaBestPlugin::EnterRealtime()
 #ifdef ENABLE_LOG
 	WriteLog("---ENTERREALTIME---");
 #endif 
-	g_d3dDevice = getDX11Device();
+	g_swapchain = getDX11SwapChain();
+	if(g_d3dDevice)
+		WriteLog("Found SwapChain");	
+	g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
 	if(g_d3dDevice)
 		WriteLog("Found DX11 device");
-	else
-		WriteLog("NOT FOUND");
-	g_d3dDevice->GetFeatureLevel();
-	/*HRESULT hr;
-	const D3D_DRIVER_TYPE devTypeArray[] =
-    {
-        D3D_DRIVER_TYPE_HARDWARE
-    };
-	const UINT devTypeArrayCount = sizeof( devTypeArray ) / sizeof( devTypeArray[0] );
-	for( UINT iDeviceType = 0; iDeviceType < devTypeArrayCount; iDeviceType++ ){
+	g_d3dDevice->GetImmediateContext(&g_context);
+	if(g_context)
+		WriteLog("Found Context");
 
-		// Fill struct w/ AdapterOrdinal and D3D_DRIVER_TYPE
-        //pDeviceInfo->AdapterOrdinal = pAdapterInfo->AdapterOrdinal;
-        //pDeviceInfo->DeviceType = devTypeArray[iDeviceType];
+	if(!g_d3dDevice || !g_swapchain || !g_context)
+		WriteLog("Failed to find dx11 resources");
 
-        D3D_FEATURE_LEVEL FeatureLevels[] =
-        {
-					D3D_FEATURE_LEVEL_11_1,
-                    D3D_FEATURE_LEVEL_11_0,
-                    D3D_FEATURE_LEVEL_10_1,
-                    D3D_FEATURE_LEVEL_10_0,
-                    D3D_FEATURE_LEVEL_9_3,
-                    D3D_FEATURE_LEVEL_9_2,
-                    D3D_FEATURE_LEVEL_9_1
-        };
-        UINT NumFeatureLevels = ARRAYSIZE( FeatureLevels );
-
-        // Call D3D11CreateDevice to ensure that this is a D3D11 device.
-        ID3D11Device* pd3dDevice = NULL;
-        ID3D11DeviceContext* pd3dDeviceContext = NULL;
-        IDXGIAdapter* pAdapter = NULL;
-		hr = g_DynamicD3D11CreateDevice(pAdapter,                               
-							            devTypeArray[iDeviceType],
-                                        ( HMODULE )0,
-                                        0,
-                                        FeatureLevels,
-                                        NumFeatureLevels,
-                                        D3D11_SDK_VERSION,
-                                        &pd3dDevice,
-						                &FeatureLevels[0],
-                                        &pd3dDeviceContext );
-		if( FAILED( hr )){
-            continue;
-        }
-		
-		WriteLog("Got a device!");
-		
-		IDXGIDevice1* pDXGIDev = NULL;
-        hr = pd3dDevice->QueryInterface( __uuidof( IDXGIDevice1 ), ( LPVOID* )&pDXGIDev );
-        if( SUCCEEDED( hr ) && pDXGIDev )
-        {
-            pDXGIDev->GetAdapter( &pAdapter );
-			WriteLog("Got an Adapter!");
-			SAFE_RELEASE(pAdapter);
-	        SAFE_RELEASE(pDXGIDev);
-        }
-
-        SAFE_RELEASE( pd3dDevice );
-		SAFE_RELEASE( pd3dDeviceContext );  
-	}*/
 }
 
 void DeltaBestPlugin::ExitRealtime()
@@ -206,9 +156,9 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
 	if(g_realtime && !g_messageDisplayed){
 		
-		if(g_d3dDevice)
-			sprintf(msgInfo.mText, "Found DX11 device");
-		else
+		if(g_d3dDevice && g_swapchain){
+			sprintf(msgInfo.mText, "Found Swap Chain");
+		}else
 			sprintf(msgInfo.mText, "NOT FOUND");
 
 		g_messageDisplayed = true;
@@ -226,7 +176,12 @@ void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info){
 	return;
 }
 
-ID3D11Device* DeltaBestPlugin::findDev(void* pvReplica, DWORD dwVTable){
+void DeltaBestPlugin::UpdateGraphics(const GraphicsInfoV02 &info){
+	if(!g_HWND)
+		g_HWND = info.mHWND;
+}
+
+IDXGISwapChain1* DeltaBestPlugin::findChain(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -259,7 +214,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 			if (dwVTableAddress == dwVTable)
 			{
 				if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; } //we don't want to hook the tempSwapChain	
-				return ((ID3D11Device*)current);	//If found we hook Present in swapChain		
+				return ((IDXGISwapChain1*)current);	//If found we hook Present in swapChain		
 			}
 		}
 	}
@@ -267,7 +222,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 
 }
 
-void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** device){
+void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain){
 	HRESULT hr;
 	D3D_FEATURE_LEVEL FeatureLevels[] ={
 					D3D_FEATURE_LEVEL_11_1,
@@ -282,45 +237,122 @@ void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** device){
 
     // Call D3D11CreateDevice to ensure that this is a D3D11 device.
     ID3D11DeviceContext* pd3dDeviceContext = NULL;
-    IDXGIAdapter* pAdapter = NULL;
-	hr = g_DynamicD3D11CreateDevice(pAdapter,                               
-		    						D3D_DRIVER_TYPE_HARDWARE,
-									( HMODULE )0,
-									0,
-									FeatureLevels,
-									NumFeatureLevels,
-									D3D11_SDK_VERSION,
-									device,
-									&FeatureLevels[0],
-									&pd3dDeviceContext );
+	hr = D3D11CreateDevice(NULL,                               
+		    				D3D_DRIVER_TYPE_HARDWARE,
+							( HMODULE )0,
+							0,
+							FeatureLevels,
+							NumFeatureLevels,
+							D3D11_SDK_VERSION,
+							&g_tempd3dDevice,
+							&FeatureLevels[0],
+							&pd3dDeviceContext );
 	SAFE_RELEASE(pd3dDeviceContext)
-	SAFE_RELEASE(pAdapter)
-	
+
+	if(g_tempd3dDevice)
+		WriteLog("Created device OK");
+	else
+		WriteLog("Failed to create device");
+	IDXGIFactory1 * pIDXGIFactory1 = NULL;
+	CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pIDXGIFactory1);
+	if(pIDXGIFactory1)
+		WriteLog("Create Factory OK");
+	else
+		WriteLog("Failed to create factory1");
+
+	UINT i = 0; 
+
+	IDXGIAdapter1 * pAdapter1; 
+	while(pIDXGIFactory1->EnumAdapters1(i, &pAdapter1) != DXGI_ERROR_NOT_FOUND){ 
+
+		IDXGIDevice * pDXGIDevice = NULL;
+		if(FAILED(g_tempd3dDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&pDXGIDevice))){
+			WriteLog("Failed to get IDXGIDevice");
+			i++;
+			continue;
+		}else{
+			WriteLog("Get IDXGIDevice OK");
+		}
+		IDXGIAdapter* pAdapter = NULL;
+		if(FAILED(pDXGIDevice->GetAdapter(&pAdapter))){
+			WriteLog("Failed to get IDXGIAdapter");
+			i++;
+			continue;
+		}else{
+			WriteLog("Get IDXGIAdapter OK");
+		}
+
+		IDXGIFactory2 * pIDXGIFactory2 = NULL;
+		if(FAILED(pAdapter->GetParent(__uuidof(IDXGIFactory2), (void **)&pIDXGIFactory2))){
+			WriteLog("Failed to get IDXGIFactory2");
+			i++;
+			continue;
+		
+		}else{
+			WriteLog("Get IDXGIFactory2 OK");
+		}
+		
+		if (!g_HWND){
+			WriteLog("Failed to get HWND");
+			return;
+		}		
+		DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
+		ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
+		swapChainDesc.Width = 4;
+		swapChainDesc.Height = 4;
+		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		swapChainDesc.Stereo = false;
+		swapChainDesc.SampleDesc.Count = 1;
+		swapChainDesc.SampleDesc.Quality = 0;
+		swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		swapChainDesc.BufferCount = 1;
+		swapChainDesc.Scaling = DXGI_SCALING_NONE;
+		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+		swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_GDI_COMPATIBLE;
+
+		DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen;
+		ZeroMemory(&fullscreen, sizeof(fullscreen));
+		fullscreen.RefreshRate.Numerator = 1;
+		fullscreen.RefreshRate.Denominator = 60;
+		fullscreen.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+		fullscreen.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+		fullscreen.Windowed = (GetWindowLong(g_HWND, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
+		
+
+		pIDXGIFactory2->CreateSwapChainForHwnd(g_tempd3dDevice, g_HWND, &swapChainDesc, NULL, NULL, tempSwapChain);
+
+		SAFE_RELEASE(pIDXGIFactory1)
+		SAFE_RELEASE(pIDXGIFactory2)
+		SAFE_RELEASE(pAdapter)
+		if(*tempSwapChain){
+			WriteLog("Created SwapChain OK");
+			break;
+		}else{
+			WriteLog("Failed to create SwapChain");
+			i++;
+		}
+	}
+	SAFE_RELEASE(pAdapter1)
 }
  
-ID3D11Device* DeltaBestPlugin::getDX11Device(){
-	ID3D11Device* pSearchDevice = NULL;
+IDXGISwapChain1* DeltaBestPlugin::getDX11SwapChain(){
+	IDXGISwapChain1* pSearch = NULL;
  
 	WriteLog("Creating fake device");
-	CreateSearchDevice(&pSearchDevice);
-	if(pSearchDevice)
-		WriteLog("Successfully created device");
+	CreateSearchSwapChain(&pSearch);
+	if(pSearch)
+		WriteLog("Successfully created swap chain");
 	else
-		WriteLog("FAILED TO CREATE DEVICE");
+		WriteLog("FAILED TO CREATE SWAP CHAIN");
 
-	//app.log("Created Search Device! (0x%X, 0x%X)\n", pSearchD3D, pSearchDevice);
+	IDXGISwapChain1* pSwapChain = NULL;
  
-	ID3D11Device* pDevice = NULL;
- 
-	DWORD pVtable = *(DWORD*)pSearchDevice;
-	//pVtable = (DWORD*)pVtable[0];
-
-	pDevice = (ID3D11Device*) findDev( pSearchDevice, pVtable );
+	DWORD pVtable = *(DWORD*)pSearch;
 	
-
-	//app.log("Found Device (0x%X)\n", pDevice);
- 
-	SAFE_RELEASE(pSearchDevice)
- 
-	return pDevice;
+	pSwapChain = (IDXGISwapChain1*) findChain( pSearch, pVtable );
+	
+	SAFE_RELEASE(pSearch)
+	SAFE_RELEASE(g_tempd3dDevice)
+	return pSwapChain;
  }

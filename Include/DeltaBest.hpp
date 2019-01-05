@@ -12,6 +12,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #include "InternalsPlugin.hpp"
 #include <d3d11.h>
+#include <dxgi1_2.h>
 
 #define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
 #define DELTA_BEST_VERSION      "v24/Nola"
@@ -63,7 +64,6 @@ typedef HRESULT     (WINAPI * LPCREATEDXGIFACTORY)(REFIID, void ** );
 typedef HRESULT     (WINAPI * LPD3D11CREATEDEVICE)( IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT32, D3D_FEATURE_LEVEL*, UINT, UINT32, ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext** );
 
 
-
 /* Toggle plugin with CTRL + a magic key. Reference:
 http://msdn.microsoft.com/en-us/library/windows/desktop/dd375731%28v=vs.85%29.aspx */
 #define DEFAULT_MAGIC_KEY       (0x44)      /* "D" */
@@ -100,8 +100,8 @@ public:
     long WantsTelemetryUpdates() { return 1; }             /* 1 = Player only */
     void UpdateTelemetry(const TelemInfoV01 &info);
 
-    bool WantsGraphicsUpdates() { return false; }
-    void UpdateGraphics(const GraphicsInfoV02 &info) { }
+    bool WantsGraphicsUpdates() { return true; }
+    void UpdateGraphics(const GraphicsInfoV02 &info);
 
     bool WantsToDisplayMessage(MessageInfoV01 &msgInfo);
 
@@ -117,9 +117,9 @@ public:
 
 private:
     void WriteLog(const char * const msg);
-	ID3D11Device* getDX11Device();
-	void CreateSearchDevice(ID3D11Device** device);
-	ID3D11Device* findDev(void* pvReplica, DWORD dwVTable);
+	IDXGISwapChain1* getDX11SwapChain();
+    void CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain);
+	IDXGISwapChain1* findChain(void* pvReplica, DWORD dwVTable);
 
     //
     // Current status
