@@ -15,7 +15,6 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "d3dx11.lib")
 
 
 // plugin information
@@ -49,7 +48,7 @@ HWND g_HWND = NULL;
 
 ID3D11Device* g_tempd3dDevice = NULL;
 ID3D11Device* g_d3dDevice = NULL;
-IDXGISwapChain1* g_swapchain = NULL;
+IDXGISwapChain* g_swapchain = NULL;
 ID3D11DeviceContext* g_context = NULL;
 
 /*
@@ -129,18 +128,19 @@ void DeltaBestPlugin::EnterRealtime()
 	WriteLog("---ENTERREALTIME---");
 #endif 
 	g_swapchain = getDX11SwapChain();
-	if(g_d3dDevice)
+	if(g_swapchain){
 		WriteLog("Found SwapChain");	
-	g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
-	if(g_d3dDevice)
-		WriteLog("Found DX11 device");
-	g_d3dDevice->GetImmediateContext(&g_context);
-	if(g_context)
-		WriteLog("Found Context");
-
+		g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
+		if(g_d3dDevice){
+			WriteLog("Found DX11 device");
+			g_d3dDevice->GetImmediateContext(&g_context);
+			if(g_context)
+				WriteLog("Found Context");
+		}
+	}
 	if(!g_d3dDevice || !g_swapchain || !g_context)
 		WriteLog("Failed to find dx11 resources");
-
+	
 }
 
 void DeltaBestPlugin::ExitRealtime()
@@ -181,7 +181,7 @@ void DeltaBestPlugin::UpdateGraphics(const GraphicsInfoV02 &info){
 		g_HWND = info.mHWND;
 }
 
-IDXGISwapChain1* DeltaBestPlugin::findChain(void* pvReplica, DWORD dwVTable){
+IDXGISwapChain* DeltaBestPlugin::findChain(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -214,7 +214,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 			if (dwVTableAddress == dwVTable)
 			{
 				if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; } //we don't want to hook the tempSwapChain	
-				return ((IDXGISwapChain1*)current);	//If found we hook Present in swapChain		
+				return ((IDXGISwapChain*)current);	//If found we hook Present in swapChain		
 			}
 		}
 	}
@@ -222,10 +222,64 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 
 }
 
-void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain){
+  void hexDump (char *desc, void *addr, int len) {
+    int i;
+    unsigned char buff[17];
+    unsigned char *pc = (unsigned char*)addr;
+    FILE* out_file = fopen("/home/joao/Desktop/wtf.log", "a");
+
+
+    // Output description if given.
+    if (desc != NULL)
+      fprintf(out_file, "%s:\n", desc);
+
+    if (len == 0) {
+      fprintf(out_file, "  ZERO LENGTH\n");
+      return;
+    }
+    if (len < 0) {
+      fprintf(out_file, "  NEGATIVE LENGTH: %i\n",len);
+      return;
+    }
+
+    // Process every byte in the data.
+    for (i = 0; i < len; i++) {
+      // Multiple of 16 means new line (with line offset).
+
+      if ((i % 16) == 0) {
+        // Just don't print ASCII for the zeroth line.
+        if (i != 0)
+          fprintf(out_file, "  %s\n", buff);
+
+        // Output the offset.
+        fprintf(out_file, "  %04x ", i);
+      }
+
+      // Now the hex code for the specific character.
+      fprintf(out_file, " %02x", pc[i]);
+
+      // And store a printable ASCII character for later.
+      if ((pc[i] < 0x20) || (pc[i] > 0x7e))
+        buff[i % 16] = '.';
+      else
+        buff[i % 16] = pc[i];
+      buff[(i % 16) + 1] = '\0';
+    }
+
+    // Pad out last line if not exactly 16 characters.
+    while ((i % 16) != 0) {
+      fprintf(out_file, "   ");
+      i++;
+    }
+
+    // And print the final ASCII bit.
+    fprintf(out_file, "  %s\n", buff);
+    fflush(out_file);
+  }
+
+void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain** tempSwapChain){
 	HRESULT hr;
 	D3D_FEATURE_LEVEL FeatureLevels[] ={
-					D3D_FEATURE_LEVEL_11_1,
                     D3D_FEATURE_LEVEL_11_0,
                     D3D_FEATURE_LEVEL_10_1,
                     D3D_FEATURE_LEVEL_10_0,
@@ -235,7 +289,6 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain){
    };
     UINT NumFeatureLevels = ARRAYSIZE( FeatureLevels );
 
-    // Call D3D11CreateDevice to ensure that this is a D3D11 device.
     ID3D11DeviceContext* pd3dDeviceContext = NULL;
 	hr = D3D11CreateDevice(NULL,                               
 		    				D3D_DRIVER_TYPE_HARDWARE,
@@ -247,108 +300,74 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain){
 							&g_tempd3dDevice,
 							&FeatureLevels[0],
 							&pd3dDeviceContext );
-	SAFE_RELEASE(pd3dDeviceContext)
 
 	if(g_tempd3dDevice)
 		WriteLog("Created device OK");
-	else
+	else{
 		WriteLog("Failed to create device");
+		return;
+	}
 	IDXGIFactory1 * pIDXGIFactory1 = NULL;
 	CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pIDXGIFactory1);
 	if(pIDXGIFactory1)
 		WriteLog("Create Factory OK");
-	else
+	else{
 		WriteLog("Failed to create factory1");
-
-	UINT i = 0; 
-
-	IDXGIAdapter1 * pAdapter1; 
-	while(pIDXGIFactory1->EnumAdapters1(i, &pAdapter1) != DXGI_ERROR_NOT_FOUND){ 
-
-		IDXGIDevice * pDXGIDevice = NULL;
-		if(FAILED(g_tempd3dDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&pDXGIDevice))){
-			WriteLog("Failed to get IDXGIDevice");
-			i++;
-			continue;
-		}else{
-			WriteLog("Get IDXGIDevice OK");
-		}
-		IDXGIAdapter* pAdapter = NULL;
-		if(FAILED(pDXGIDevice->GetAdapter(&pAdapter))){
-			WriteLog("Failed to get IDXGIAdapter");
-			i++;
-			continue;
-		}else{
-			WriteLog("Get IDXGIAdapter OK");
-		}
-
-		IDXGIFactory2 * pIDXGIFactory2 = NULL;
-		if(FAILED(pAdapter->GetParent(__uuidof(IDXGIFactory2), (void **)&pIDXGIFactory2))){
-			WriteLog("Failed to get IDXGIFactory2");
-			i++;
-			continue;
-		
-		}else{
-			WriteLog("Get IDXGIFactory2 OK");
-		}
-		
-		if (!g_HWND){
-			WriteLog("Failed to get HWND");
-			return;
-		}		
-		DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
-		ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
-		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		swapChainDesc.Stereo = false;
-		swapChainDesc.SampleDesc.Count = 1;
-		swapChainDesc.SampleDesc.Quality = 0;
-		swapChainDesc.BufferUsage = DXGI_USAGE_BACK_BUFFER;
-		swapChainDesc.BufferCount = 1;
-		swapChainDesc.Scaling = DXGI_SCALING_NONE;
-		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-		swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-
-		DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen;
-		ZeroMemory(&fullscreen, sizeof(fullscreen));
-		fullscreen.RefreshRate.Numerator = 1;
-		fullscreen.RefreshRate.Denominator = 60;
-		fullscreen.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-		fullscreen.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-		fullscreen.Windowed = (GetWindowLong(g_HWND, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
-		
-
-		pIDXGIFactory2->CreateSwapChainForHwnd(g_tempd3dDevice, g_HWND, &swapChainDesc, NULL, NULL, tempSwapChain);
-
-		SAFE_RELEASE(pDXGIDevice)
-		SAFE_RELEASE(pIDXGIFactory1)
-		SAFE_RELEASE(pIDXGIFactory2)
-		SAFE_RELEASE(pAdapter)
-		if(*tempSwapChain){
-			WriteLog("Created SwapChain OK");
-			break;
-		}else{
-			WriteLog("Failed to create SwapChain");
-			i++;
-		}
+		return;
 	}
-	SAFE_RELEASE(pAdapter1)
+
+	HWND hWnd = GetForegroundWindow();
+	if ( hWnd == nullptr ){
+		WriteLog("Failed to get HWND");
+		return;
+	}
+
+	DXGI_SWAP_CHAIN_DESC swapChainDesc;
+	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
+	swapChainDesc.BufferCount = 1;
+	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swapChainDesc.OutputWindow = hWnd;
+	swapChainDesc.SampleDesc.Count = 1;
+	swapChainDesc.Windowed = TRUE; //(GetWindowLong(hWnd, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
+	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+	
+	hexDump("Swap Chain Desc", &swapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC));
+
+	hr = pIDXGIFactory1->CreateSwapChain(g_tempd3dDevice, &swapChainDesc, tempSwapChain);
+		
+
+	if(*tempSwapChain){
+		WriteLog("Created SwapChain OK");
+	}else{
+		WriteLog("Failed to create SwapChain");
+		fprintf(out_file, "HR: %d\n", hr);
+		fflush(out_file);
+	}
+	
+	SAFE_RELEASE(pd3dDeviceContext)
+	SAFE_RELEASE(pIDXGIFactory1)
 }
  
-IDXGISwapChain1* DeltaBestPlugin::getDX11SwapChain(){
-	IDXGISwapChain1* pSearch = NULL;
+IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
+	IDXGISwapChain* pSearch = NULL;
  
 	WriteLog("Creating fake device");
 	CreateSearchSwapChain(&pSearch);
 	if(pSearch)
 		WriteLog("Successfully created swap chain");
-	else
+	else{
 		WriteLog("FAILED TO CREATE SWAP CHAIN");
+		return NULL;
+	}
 
-	IDXGISwapChain1* pSwapChain = NULL;
+	IDXGISwapChain* pSwapChain = NULL;
  
 	DWORD pVtable = *(DWORD*)pSearch;
 	
-	pSwapChain = (IDXGISwapChain1*) findChain( pSearch, pVtable );
+	pSwapChain = (IDXGISwapChain*) findChain( pSearch, pVtable );
 	
 	SAFE_RELEASE(pSearch)
 	SAFE_RELEASE(g_tempd3dDevice)

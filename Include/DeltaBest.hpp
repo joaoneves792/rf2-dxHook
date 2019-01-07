@@ -117,9 +117,9 @@ public:
 
 private:
     void WriteLog(const char * const msg);
-	IDXGISwapChain1* getDX11SwapChain();
-    void CreateSearchSwapChain(IDXGISwapChain1** tempSwapChain);
-	IDXGISwapChain1* findChain(void* pvReplica, DWORD dwVTable);
+	IDXGISwapChain* getDX11SwapChain();
+    void CreateSearchSwapChain(IDXGISwapChain** tempSwapChain);
+	IDXGISwapChain* findChain(void* pvReplica, DWORD dwVTable);
 
     //
     // Current status
