@@ -134,8 +134,11 @@ void DeltaBestPlugin::EnterRealtime()
 		if(g_d3dDevice){
 			WriteLog("Found DX11 device");
 			g_d3dDevice->GetImmediateContext(&g_context);
-			if(g_context)
+			if(g_context){
 				WriteLog("Found Context");
+
+				//g_swapchain->Present(0, 0);
+			}
 		}
 	}
 	if(!g_d3dDevice || !g_swapchain || !g_context)
@@ -181,7 +184,7 @@ void DeltaBestPlugin::UpdateGraphics(const GraphicsInfoV02 &info){
 		g_HWND = info.mHWND;
 }
 
-IDXGISwapChain* DeltaBestPlugin::findChain(void* pvReplica, DWORD dwVTable){
+void* DeltaBestPlugin::findInstance(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -213,8 +216,8 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 					
 			if (dwVTableAddress == dwVTable)
 			{
-				if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; } //we don't want to hook the tempSwapChain	
-				return ((IDXGISwapChain*)current);	//If found we hook Present in swapChain		
+				if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; }	
+				return ((void*)current);	
 			}
 		}
 	}
@@ -277,16 +280,11 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
     fflush(out_file);
   }
 
-void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain** tempSwapChain){
+void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext){
 	HRESULT hr;
 	D3D_FEATURE_LEVEL FeatureLevels[] ={
                     D3D_FEATURE_LEVEL_11_0,
-                    D3D_FEATURE_LEVEL_10_1,
-                    D3D_FEATURE_LEVEL_10_0,
-                    D3D_FEATURE_LEVEL_9_3,
-                    D3D_FEATURE_LEVEL_9_2,
-                    D3D_FEATURE_LEVEL_9_1
-   };
+	};
     UINT NumFeatureLevels = ARRAYSIZE( FeatureLevels );
 
     ID3D11DeviceContext* pd3dDeviceContext = NULL;
@@ -297,16 +295,21 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain** tempSwapChain){
 							FeatureLevels,
 							NumFeatureLevels,
 							D3D11_SDK_VERSION,
-							&g_tempd3dDevice,
+							pDevice,
 							&FeatureLevels[0],
-							&pd3dDeviceContext );
+							pContext);
 
-	if(g_tempd3dDevice)
+	if(*pDevice)
 		WriteLog("Created device OK");
 	else{
 		WriteLog("Failed to create device");
-		return;
 	}
+	
+}
+
+void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain){
+	HRESULT hr;
+
 	IDXGIFactory1 * pIDXGIFactory1 = NULL;
 	CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pIDXGIFactory1);
 	if(pIDXGIFactory1)
@@ -336,7 +339,7 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain** tempSwapChain){
 	
 	hexDump("Swap Chain Desc", &swapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC));
 
-	hr = pIDXGIFactory1->CreateSwapChain(g_tempd3dDevice, &swapChainDesc, tempSwapChain);
+	hr = pIDXGIFactory1->CreateSwapChain(device, &swapChainDesc, tempSwapChain);
 		
 
 	if(*tempSwapChain){
@@ -347,29 +350,30 @@ void DeltaBestPlugin::CreateSearchSwapChain(IDXGISwapChain** tempSwapChain){
 		fflush(out_file);
 	}
 	
-	SAFE_RELEASE(pd3dDeviceContext)
+
 	SAFE_RELEASE(pIDXGIFactory1)
 }
  
 IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
-	IDXGISwapChain* pSearch = NULL;
- 
-	WriteLog("Creating fake device");
-	CreateSearchSwapChain(&pSearch);
-	if(pSearch)
+	IDXGISwapChain* pSearchSwapChain = NULL;	
+	ID3D11Device* pDevice = NULL;
+	ID3D11DeviceContext* pContext = NULL;
+	CreateSearchDevice(&pDevice, &pContext);
+	WriteLog("Creating fake swapChain");
+	CreateSearchSwapChain(pDevice, &pSearchSwapChain);
+	if(pSearchSwapChain)
 		WriteLog("Successfully created swap chain");
 	else{
 		WriteLog("FAILED TO CREATE SWAP CHAIN");
 		return NULL;
 	}
-
 	IDXGISwapChain* pSwapChain = NULL;
- 
-	DWORD pVtable = *(DWORD*)pSearch;
+ 	DWORD pVtable = *(DWORD*)pSearchSwapChain;
+	pSwapChain = (IDXGISwapChain*) findInstance( pSearchSwapChain, pVtable );
 	
-	pSwapChain = (IDXGISwapChain*) findChain( pSearch, pVtable );
-	
-	SAFE_RELEASE(pSearch)
-	SAFE_RELEASE(g_tempd3dDevice)
+	SAFE_RELEASE(pSearchSwapChain)	
+	SAFE_RELEASE(pContext)
+	SAFE_RELEASE(pDevice)
+
 	return pSwapChain;
  }
