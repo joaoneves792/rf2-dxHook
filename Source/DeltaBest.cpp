@@ -136,8 +136,6 @@ void DeltaBestPlugin::EnterRealtime()
 			g_d3dDevice->GetImmediateContext(&g_context);
 			if(g_context){
 				WriteLog("Found Context");
-
-				//g_swapchain->Present(0, 0);
 			}
 		}
 	}
@@ -280,6 +278,29 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
     fflush(out_file);
   }
 
+void DeltaBestPlugin::CreateInvisibleWindow(HWND* hwnd){
+	WNDCLASSEXW wc;
+    ZeroMemory(&wc, sizeof(WNDCLASSEX));
+    wc.cbSize = sizeof(WNDCLASSEX);
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = DefWindowProc;
+    wc.hInstance = NULL;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)COLOR_WINDOW;
+    wc.lpszClassName = L"FY";
+    RegisterClassExW(&wc);
+    *hwnd = CreateWindowExW(0,
+                             L"FY",
+                             L"null",
+                             WS_OVERLAPPEDWINDOW,
+                             300, 300,
+                             640, 480,
+                             nullptr,
+                             nullptr,
+                             nullptr,
+                             nullptr);
+}
+
 void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext){
 	HRESULT hr;
 	D3D_FEATURE_LEVEL FeatureLevels[] ={
@@ -307,7 +328,7 @@ void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceCon
 	
 }
 
-void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain){
+void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd){
 	HRESULT hr;
 
 	IDXGIFactory1 * pIDXGIFactory1 = NULL;
@@ -319,18 +340,14 @@ void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain
 		return;
 	}
 
-	HWND hWnd = GetForegroundWindow();
-	if ( hWnd == nullptr ){
-		WriteLog("Failed to get HWND");
-		return;
-	}
+
 
 	DXGI_SWAP_CHAIN_DESC swapChainDesc;
 	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
 	swapChainDesc.BufferCount = 1;
 	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	swapChainDesc.OutputWindow = hWnd;
+	swapChainDesc.OutputWindow = hwnd;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.Windowed = TRUE; //(GetWindowLong(hWnd, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
 	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
@@ -359,8 +376,22 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 	ID3D11Device* pDevice = NULL;
 	ID3D11DeviceContext* pContext = NULL;
 	CreateSearchDevice(&pDevice, &pContext);
+ 	DWORD pVtable = *(DWORD*)pDevice;
+	g_d3dDevice = (ID3D11Device*) findInstance( pDevice, pVtable );
+
+	HWND hWnd;
+#ifdef DXVK
+	CreateInvisibleWindow(&hWnd);
+#else
+	hWnd = GetForegroundWindow();
+#endif // DXVK
+	if (hWnd == NULL){
+		WriteLog("Failed to get HWND");
+		return NULL;
+	}
+
 	WriteLog("Creating fake swapChain");
-	CreateSearchSwapChain(pDevice, &pSearchSwapChain);
+	CreateSearchSwapChain(g_d3dDevice, &pSearchSwapChain, hWnd);
 	if(pSearchSwapChain)
 		WriteLog("Successfully created swap chain");
 	else{
@@ -368,9 +399,13 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 		return NULL;
 	}
 	IDXGISwapChain* pSwapChain = NULL;
- 	DWORD pVtable = *(DWORD*)pSearchSwapChain;
+	pVtable = *(DWORD*)pSearchSwapChain;
 	pSwapChain = (IDXGISwapChain*) findInstance( pSearchSwapChain, pVtable );
 	
+	//pContext->ClearState();
+	//pContext->OMGetRenderTargets(1, 
+	//pSearchSwapChain->SetFullscreenState(false, nullptr);
+	//pSearchSwapChain->Release();
 	SAFE_RELEASE(pSearchSwapChain)	
 	SAFE_RELEASE(pContext)
 	SAFE_RELEASE(pDevice)

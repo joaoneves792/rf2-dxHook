@@ -16,6 +16,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
 #define DELTA_BEST_VERSION      "v24/Nola"
+#define DXVK 1
+
 
 #undef ENABLE_LOG               /* To enable file logging */
 
@@ -118,8 +120,9 @@ public:
 private:
     void WriteLog(const char * const msg);
 	IDXGISwapChain* getDX11SwapChain();
-    void CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain);
+    void CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd);
 	void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
+	void CreateInvisibleWindow(HWND* hwnd);
 	void* findInstance(void* pvReplica, DWORD dwVTable);
 
     //
