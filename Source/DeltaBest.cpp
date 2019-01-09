@@ -13,6 +13,12 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <dxgi1_2.h>
 #include <cstdio>
 
+#define BEA_ENGINE_STATIC  /* specify the usage of a static version of BeaEngine */
+#define BEA_USE_STDCALL    /* specify the usage of a stdcall version of BeaEngine */
+#include <BeaEngine.h>
+ 
+#pragma comment(lib, "BeaEngine_s_d.lib")
+
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
 
@@ -50,6 +56,15 @@ namespace semaphoreDX11{
 	ID3D11Device* g_d3dDevice = NULL;
 	IDXGISwapChain* g_swapchain = NULL;
 	ID3D11DeviceContext* g_context = NULL;
+	
+    typedef HRESULT(__stdcall *D3D11PresentHook) (IDXGISwapChain* This, UINT SyncInterval, UINT Flags);
+	D3D11PresentHook g_oldPresent;
+	struct HookContext{
+		BYTE original_code[64];
+		SIZE_T dst_ptr;
+		BYTE far_jmp[6];
+	};
+	HookContext* presenthook64;
 }
 
 using namespace semaphoreDX11;
@@ -77,6 +92,12 @@ void DeltaBestPlugin::Load()
 
 }
 
+HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
+	fprintf(out_file, "HOOKED!!!!");
+	return S_OK;
+    //g_oldPresent(This, SyncInterval, Flags);
+}
+
 void DeltaBestPlugin::EnterRealtime()
 {
 	g_realtime = true;
@@ -85,6 +106,8 @@ void DeltaBestPlugin::EnterRealtime()
 #endif 
 	if(!g_swapchain){
 		g_swapchain = getDX11SwapChain();
+		if(g_swapchain)
+			g_oldPresent = (D3D11PresentHook)hookVMT(g_swapchain, 8, hookedPresent);
 	}
 	if(g_swapchain){
 		WriteLog("Found SwapChain");	
@@ -99,6 +122,12 @@ void DeltaBestPlugin::EnterRealtime()
 	}
 	if(!g_d3dDevice || !g_swapchain || !g_context)
 		WriteLog("Failed to find dx11 resources");
+	if(g_oldPresent){
+		WriteLog("Present Hook successfull");
+		g_swapchain->Present(1, 0);
+	}else{
+		WriteLog("Unable to hook Present");
+	}
 	
 }
 
@@ -115,10 +144,10 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
 	if(g_realtime && !g_messageDisplayed){
 		
-		if(g_d3dDevice && g_swapchain){
-			sprintf(msgInfo.mText, "Found Swap Chain");
+		if(g_d3dDevice && g_swapchain && g_oldPresent){
+			sprintf(msgInfo.mText, "Semaphore DX11 OK");
 		}else
-			sprintf(msgInfo.mText, "NOT FOUND");
+			sprintf(msgInfo.mText, "Semaphore DX11 FAILURE");
 
 		g_messageDisplayed = true;
 		return true;
@@ -127,7 +156,153 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 }
 
 
+ 
+const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength){
+		DISASM disasm;
+		memset(&disasm, 0, sizeof(DISASM));
+ 
+		disasm.EIP = (UIntPtr)address;
+		disasm.Archi = 0x40;
+ 
+		unsigned int processed = 0;
+		while (processed < jumplength)
+		{
+			const int len = Disasm(&disasm);
+			if (len == UNKNOWN_OPCODE)
+			{
+				++disasm.EIP;
+			}
+			else
+			{
+				processed += len;
+				disasm.EIP += len;
+			}
+		}
+ 
+		return processed;
+}
+  void hexDump (char *desc, void *addr, int len) {
+    int i;
+    unsigned char buff[17];
+    unsigned char *pc = (unsigned char*)addr;
+    FILE* out_file = fopen("/home/joao/Desktop/wtf.log", "a");
 
+
+    // Output description if given.
+    if (desc != NULL)
+      fprintf(out_file, "%s:\n", desc);
+
+    if (len == 0) {
+      fprintf(out_file, "  ZERO LENGTH\n");
+      return;
+    }
+    if (len < 0) {
+      fprintf(out_file, "  NEGATIVE LENGTH: %i\n",len);
+      return;
+    }
+
+    // Process every byte in the data.
+    for (i = 0; i < len; i++) {
+      // Multiple of 16 means new line (with line offset).
+
+      if ((i % 16) == 0) {
+        // Just don't print ASCII for the zeroth line.
+        if (i != 0)
+          fprintf(out_file, "  %s\n", buff);
+
+        // Output the offset.
+        fprintf(out_file, "  %04x ", i);
+      }
+
+      // Now the hex code for the specific character.
+      fprintf(out_file, " %02x", pc[i]);
+
+      // And store a printable ASCII character for later.
+      if ((pc[i] < 0x20) || (pc[i] > 0x7e))
+        buff[i % 16] = '.';
+      else
+        buff[i % 16] = pc[i];
+      buff[(i % 16) + 1] = '\0';
+    }
+
+    // Pad out last line if not exactly 16 characters.
+    while ((i % 16) != 0) {
+      fprintf(out_file, "   ");
+      i++;
+    }
+
+    // And print the final ASCII bit.
+    fprintf(out_file, "  %s\n", buff);
+    fflush(out_file);
+} 
+
+
+//based on: https://www.unknowncheats.me/forum/d3d-tutorials-and-source/88369-universal-d3d11-hook.html by evolution536
+void* DeltaBestPlugin::hookVMT(void* instance, int index, void* newFunction){
+#ifdef _AMD64_
+#define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
+MEMORY_BASIC_INFORMATION64 mbi = { 0 };
+#else
+#define _PTR_MAX_VALUE 0xFFE00000
+MEMORY_BASIC_INFORMATION32 mbi = { 0 };
+#endif
+	DWORD* pVtable = (DWORD*)(*(DWORD*)instance);
+	BYTE* src = (BYTE*)(pVtable[index]);
+	hexDump("Vtable[8] CODE:", src, 16);
+
+	//for (SIZE_T addr = (SIZE_T)src; addr > (SIZE_T)src - 0x80000000; addr = (SIZE_T)mbi.BaseAddress - 1){
+	for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){	
+		/*if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi))){
+			    WriteLog("VirtualQuery Failed");
+				break;
+		}*/
+		if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
+			continue;
+ 		if(mbi.State == MEM_FREE){
+			//WriteLog("Found Free Mem");
+			if (presenthook64 = (HookContext*)VirtualAlloc((LPVOID)mbi.BaseAddress, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE)){
+					break;
+			}
+		}
+	}
+ 
+	// If allocating a memory page failed, the function failed.
+	if (!presenthook64)
+		return NULL;
+
+	// Save original code and apply detour. The detour code is:
+	// push rax
+	// movabs rax, 0xCCCCCCCCCCCCCCCC
+	// xchg rax, [rsp]
+	// ret
+	BYTE detour[] = { 0x50, 0x48, 0xB8, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0x48, 0x87, 0x04, 0x24, 0xC3 };
+	const unsigned int length = DisasmLengthCheck((SIZE_T)src, PRESENT_JUMP_LENGTH);
+	fprintf(out_file, "length = %d\n", length);
+	memcpy(presenthook64->original_code, src, length);
+	memcpy(&presenthook64->original_code[length], detour, sizeof(detour));
+	*(SIZE_T*)&presenthook64->original_code[length + 3] = (SIZE_T)src + length;
+ 
+	// Build a far jump to the destination function.
+	*(WORD*)&presenthook64->far_jmp = 0x25FF;
+	*(DWORD*)(presenthook64->far_jmp + 2) = (DWORD)((SIZE_T)presenthook64 - (SIZE_T)src + FIELD_OFFSET(HookContext, dst_ptr) - 6);
+	presenthook64->dst_ptr = (SIZE_T)newFunction;
+ 	
+	// Write the hook to the original function.
+	DWORD flOld = 0;
+	VirtualProtect(src, 6, PAGE_EXECUTE_READWRITE, &flOld);
+	memcpy(src, presenthook64->far_jmp, sizeof(presenthook64->far_jmp));
+	VirtualProtect(src, 6, flOld, &flOld);
+ 
+	// Return a pointer to the original code.
+	hexDump("Vtable[8] CODE:", src, 16);
+	hexDump("oldPresent CODE:", presenthook64->original_code, 16);
+
+
+	return presenthook64->original_code;
+}
+
+
+//based on https://www.unknowncheats.me/forum/d3d-tutorials-source/121840-hook-directx-11-dynamically.html by smallC
 void* DeltaBestPlugin::findInstance(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
@@ -136,7 +311,6 @@ MEMORY_BASIC_INFORMATION64 mbi = { 0 };
 #define _PTR_MAX_VALUE 0xFFE00000
 MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 #endif
-	
 	for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)) //For x64 -> 0x10000 ->  0x7FFFFFFEFFFF
 	{
 		if (!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery

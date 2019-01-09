@@ -103,7 +103,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>DeltaBest</TargetName>
     <ExecutablePath>$(VCInstallDir)bin\x86_amd64;$(VCInstallDir)bin;$(WindowsSdkDir)bin\NETFX 4.0 Tools;$(WindowsSdkDir)bin;$(VSInstallDir)Common7\Tools\bin;$(VSInstallDir)Common7\tools;$(VSInstallDir)Common7\ide;$(ProgramFiles)\HTML Help Workshop;$(FrameworkSDKDir)\bin;$(MSBuildToolsPath32);$(VSInstallDir);$(SystemRoot)\SysWow64;$(FxCopDir);$(PATH);$(WindowsSDK_BinPath);</ExecutablePath>
-    <LibraryPath>C:\Program Files (x86)\Windows Kits\8.0\Lib\win8\um\x64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(ProjectDir)\..\lib;C:\Program Files (x86)\Windows Kits\8.0\Lib\win8\um\x64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(LibraryPath)</LibraryPath>
     <IncludePath>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include;$(IncludePath)</IncludePath>
     <CodeAnalysisRuleSet>NativeMinimumRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
@@ -305,7 +305,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Include\basic_types.h" />
+    <ClInclude Include="..\Include\BeaEngine.h" />
     <ClInclude Include="..\include\DeltaBest.hpp" />
+    <ClInclude Include="..\Include\export.h" />
     <ClInclude Include="..\Include\InternalsPlugin.hpp" />
     <ClInclude Include="..\Include\PluginObjects.hpp" />
   </ItemGroup>

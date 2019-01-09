@@ -18,9 +18,6 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #define DELTA_BEST_VERSION      "v24/Nola"
 #define DXVK 1
 
-
-#undef ENABLE_LOG               /* To enable file logging */
-
 #if _WIN64
   #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
 #else
@@ -28,53 +25,14 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #endif
 
-
-#define DATA_PATH_FILE			"Core\\data.path"
-#define BEST_LAP_DIR			"%s\\Userdata\\player\\Settings\\DeltaBest"
-#define BEST_LAP_FILE			"%s\\%s_%s.lap"
-
-/* Game phases -> info.mGamePhase */
-#define GP_GREEN_FLAG           5
-#define GP_YELLOW_FLAG		    6
-#define GP_SESSION_OVER			8
-
-#define COLOR_INTENSITY         0xF0
-
-#define DEFAULT_FONT_SIZE       48
-#define DEFAULT_FONT_NAME       "Arial Black"
-
-#define DEFAULT_BAR_WIDTH       580
-#define DEFAULT_BAR_HEIGHT      20
-#define DEFAULT_BAR_TOP         130
-#define DEFAULT_BAR_TIME_GUTTER 5
-
-#define DEFAULT_TIME_WIDTH      128
-#define DEFAULT_TIME_HEIGHT     35
-
-/* Whether to use UpdateTelemetry() to achieve a better precision and
-   faster updates to the delta time instead of every 0.2s that
-   UpdateScoring() allows */
-#define DEFAULT_HIRES_UPDATES   1
-
 #ifndef SAFE_RELEASE
 #define SAFE_RELEASE(p)      { if (p) { (p)->Release(); (p)=NULL; } }
 #endif
-typedef BOOL        (WINAPI * LPD3DPERF_QUERYREPEATFRAME)(void);
-typedef VOID        (WINAPI * LPD3DPERF_SETOPTIONS)( DWORD dwOptions );
-typedef DWORD       (WINAPI * LPD3DPERF_GETSTATUS)( void );
-typedef HRESULT     (WINAPI * LPCREATEDXGIFACTORY)(REFIID, void ** );
-typedef HRESULT     (WINAPI * LPD3D11CREATEDEVICE)( IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT32, D3D_FEATURE_LEVEL*, UINT, UINT32, ID3D11Device**, D3D_FEATURE_LEVEL*, ID3D11DeviceContext** );
 
+#define PRESENT_INDEX 8
+//16 because we are 64bit
+#define PRESENT_JUMP_LENGTH 16 
 
-/* Toggle plugin with CTRL + a magic key. Reference:
-http://msdn.microsoft.com/en-us/library/windows/desktop/dd375731%28v=vs.85%29.aspx */
-#define DEFAULT_MAGIC_KEY       (0x44)      /* "D" */
-#define DEFAULT_RESET_KEY		(0x5A)      /* "Z" */
-#define KEY_DOWN(k)             ((GetAsyncKeyState(k) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000))
-
-#define FONT_NAME_MAXLEN 32
-
-// This is used for the app to use the plugin for its intended purpose
 class DeltaBestPlugin : public InternalsPluginV06
 {
 
@@ -100,6 +58,7 @@ private:
 	void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
 	void CreateInvisibleWindow(HWND* hwnd);
 	void* findInstance(void* pvReplica, DWORD dwVTable);
+	void* hookVMT(void* instance, int index, void* newFunction);
 
     //
     // Current status
