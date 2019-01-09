@@ -84,38 +84,14 @@ public:
     DeltaBestPlugin() {}
     ~DeltaBestPlugin() {}
 
-    // These are the functions derived from base class InternalsPlugin
-    // that can be implemented.
-    void Startup(long version);    // game startup
-    void Shutdown() {};            // game shutdown
 
-    void EnterRealtime();          // entering realtime
-    void ExitRealtime();           // exiting realtime
-
-    void StartSession();           // session has started
-    void EndSession();             // session has ended
+    void EnterRealtime();
+	void ExitRealtime();
 
 	void Load();                   // when a new track/car is loaded
-	void Unload();                 // back to the selection screen
 
-    // GAME OUTPUT
-    long WantsTelemetryUpdates() { return 1; }             /* 1 = Player only */
-    void UpdateTelemetry(const TelemInfoV01 &info);
-
-    bool WantsGraphicsUpdates() { return true; }
-    void UpdateGraphics(const GraphicsInfoV02 &info);
 
     bool WantsToDisplayMessage(MessageInfoV01 &msgInfo);
-
-    // GAME INPUT
-    bool HasHardwareInputs() { return false; }
-    void UpdateHardware(const float fDT) { mET += fDT; }   // update the hardware with the time between frames
-    void EnableHardware() { mEnabled = true; }             // message from game to enable hardware
-    void DisableHardware() { mEnabled = false; }           // message from game to disable hardware
-	
-    // SCORING OUTPUT
-    bool WantsScoringUpdates() { return true; }
-    void UpdateScoring(const ScoringInfoV01 &info);
 
 private:
     void WriteLog(const char * const msg);

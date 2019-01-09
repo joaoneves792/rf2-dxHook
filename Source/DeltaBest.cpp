@@ -36,35 +36,23 @@ extern "C" __declspec(dllexport)
 
 #define ENABLE_LOG 1
 
+namespace semaphoreDX11{
+	#ifdef ENABLE_LOG
+	FILE* out_file = NULL;
+	#endif
 
-#ifdef ENABLE_LOG
-FILE* out_file = NULL;
-#endif
+	bool g_realtime = false;
+	bool g_messageDisplayed = false;
 
-bool g_realtime = false;
-bool g_messageDisplayed = false;
+	HWND g_HWND = NULL;
 
-HWND g_HWND = NULL;
+	ID3D11Device* g_tempd3dDevice = NULL;
+	ID3D11Device* g_d3dDevice = NULL;
+	IDXGISwapChain* g_swapchain = NULL;
+	ID3D11DeviceContext* g_context = NULL;
+}
 
-ID3D11Device* g_tempd3dDevice = NULL;
-ID3D11Device* g_d3dDevice = NULL;
-IDXGISwapChain* g_swapchain = NULL;
-ID3D11DeviceContext* g_context = NULL;
-
-/*
-// DirectX 9 objects, to render some text on screen
-LPD3DXFONT g_Font = NULL;
-D3DXFONT_DESC FontDesc = {
-	DEFAULT_FONT_SIZE, 0, 400, 0, false, DEFAULT_CHARSET,
-	OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_PITCH, DEFAULT_FONT_NAME
-};
-RECT FontPosition, ShadowPosition;
-LPD3DXSPRITE bar = NULL;
-LPDIRECT3DTEXTURE9 texture = NULL;
-*/
-//
-// DeltaBestPlugin class
-//
+using namespace semaphoreDX11;
 
 void DeltaBestPlugin::WriteLog(const char * const msg)
 {
@@ -79,31 +67,7 @@ void DeltaBestPlugin::WriteLog(const char * const msg)
 #endif 
 }
 
-void DeltaBestPlugin::Startup(long version)
-{
-#ifdef ENABLE_LOG
-	WriteLog("--STARTUP--");
-#endif 
-}
 
-void DeltaBestPlugin::StartSession()
-{
-#ifdef ENABLE_LOG
-	WriteLog("--STARTSESSION--");
-#endif 
-}
-
-void DeltaBestPlugin::EndSession()
-{
-#ifdef ENABLE_LOG
-	WriteLog("--ENDSESSION--");
-	if (out_file) {
-		fclose(out_file);
-		out_file = NULL;
-	}
-
-#endif 
-}
 
 void DeltaBestPlugin::Load()
 {
@@ -113,21 +77,15 @@ void DeltaBestPlugin::Load()
 
 }
 
-void DeltaBestPlugin::Unload()
-{
-#ifdef ENABLE_LOG
-	WriteLog("--UNLOAD--");
-
-#endif 
-}
-
 void DeltaBestPlugin::EnterRealtime()
 {
 	g_realtime = true;
 #ifdef ENABLE_LOG
 	WriteLog("---ENTERREALTIME---");
 #endif 
-	g_swapchain = getDX11SwapChain();
+	if(!g_swapchain){
+		g_swapchain = getDX11SwapChain();
+	}
 	if(g_swapchain){
 		WriteLog("Found SwapChain");	
 		g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
@@ -169,18 +127,6 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 }
 
 
-void DeltaBestPlugin::UpdateTelemetry(const TelemInfoV01 &info){
-	return;
-}
-
-void DeltaBestPlugin::UpdateScoring(const ScoringInfoV01 &info){
-	return;
-}
-
-void DeltaBestPlugin::UpdateGraphics(const GraphicsInfoV02 &info){
-	if(!g_HWND)
-		g_HWND = info.mHWND;
-}
 
 void* DeltaBestPlugin::findInstance(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
@@ -222,61 +168,6 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	return NULL;
 
 }
-
-  void hexDump (char *desc, void *addr, int len) {
-    int i;
-    unsigned char buff[17];
-    unsigned char *pc = (unsigned char*)addr;
-    FILE* out_file = fopen("/home/joao/Desktop/wtf.log", "a");
-
-
-    // Output description if given.
-    if (desc != NULL)
-      fprintf(out_file, "%s:\n", desc);
-
-    if (len == 0) {
-      fprintf(out_file, "  ZERO LENGTH\n");
-      return;
-    }
-    if (len < 0) {
-      fprintf(out_file, "  NEGATIVE LENGTH: %i\n",len);
-      return;
-    }
-
-    // Process every byte in the data.
-    for (i = 0; i < len; i++) {
-      // Multiple of 16 means new line (with line offset).
-
-      if ((i % 16) == 0) {
-        // Just don't print ASCII for the zeroth line.
-        if (i != 0)
-          fprintf(out_file, "  %s\n", buff);
-
-        // Output the offset.
-        fprintf(out_file, "  %04x ", i);
-      }
-
-      // Now the hex code for the specific character.
-      fprintf(out_file, " %02x", pc[i]);
-
-      // And store a printable ASCII character for later.
-      if ((pc[i] < 0x20) || (pc[i] > 0x7e))
-        buff[i % 16] = '.';
-      else
-        buff[i % 16] = pc[i];
-      buff[(i % 16) + 1] = '\0';
-    }
-
-    // Pad out last line if not exactly 16 characters.
-    while ((i % 16) != 0) {
-      fprintf(out_file, "   ");
-      i++;
-    }
-
-    // And print the final ASCII bit.
-    fprintf(out_file, "  %s\n", buff);
-    fflush(out_file);
-  }
 
 void DeltaBestPlugin::CreateInvisibleWindow(HWND* hwnd){
 	WNDCLASSEXW wc;
@@ -354,8 +245,6 @@ void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain
 	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 	
-	hexDump("Swap Chain Desc", &swapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC));
-
 	hr = pIDXGIFactory1->CreateSwapChain(device, &swapChainDesc, tempSwapChain);
 		
 
@@ -375,10 +264,13 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 	IDXGISwapChain* pSearchSwapChain = NULL;	
 	ID3D11Device* pDevice = NULL;
 	ID3D11DeviceContext* pContext = NULL;
+	
+	WriteLog("Creating D3D11 Device");
 	CreateSearchDevice(&pDevice, &pContext);
- 	DWORD pVtable = *(DWORD*)pDevice;
-	g_d3dDevice = (ID3D11Device*) findInstance( pDevice, pVtable );
+	if(!pDevice)
+		return NULL;
 
+	WriteLog("Getting window handle");
 	HWND hWnd;
 #ifdef DXVK
 	CreateInvisibleWindow(&hWnd);
@@ -391,7 +283,7 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 	}
 
 	WriteLog("Creating fake swapChain");
-	CreateSearchSwapChain(g_d3dDevice, &pSearchSwapChain, hWnd);
+	CreateSearchSwapChain(pDevice, &pSearchSwapChain, hWnd);
 	if(pSearchSwapChain)
 		WriteLog("Successfully created swap chain");
 	else{
@@ -399,13 +291,13 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 		return NULL;
 	}
 	IDXGISwapChain* pSwapChain = NULL;
-	pVtable = *(DWORD*)pSearchSwapChain;
+	DWORD pVtable = *(DWORD*)pSearchSwapChain;
 	pSwapChain = (IDXGISwapChain*) findInstance( pSearchSwapChain, pVtable );
-	
-	//pContext->ClearState();
-	//pContext->OMGetRenderTargets(1, 
-	//pSearchSwapChain->SetFullscreenState(false, nullptr);
-	//pSearchSwapChain->Release();
+	if(pSwapChain)
+		WriteLog("Found Swapchain");
+	else
+		WriteLog("Unable to find Swapchain");
+
 	SAFE_RELEASE(pSearchSwapChain)	
 	SAFE_RELEASE(pContext)
 	SAFE_RELEASE(pDevice)
