@@ -93,9 +93,12 @@ void DeltaBestPlugin::Load()
 }
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-	fprintf(out_file, "HOOKED!!!!");
-	return S_OK;
-    //g_oldPresent(This, SyncInterval, Flags);
+	ID3D11RenderTargetView* backbuffer;
+    FLOAT Green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+    g_context->OMGetRenderTargets(1, &backbuffer, NULL);
+    g_context->ClearRenderTargetView(backbuffer, Green);
+
+	return g_oldPresent(This, SyncInterval, Flags);
 }
 
 void DeltaBestPlugin::EnterRealtime()
@@ -106,8 +109,11 @@ void DeltaBestPlugin::EnterRealtime()
 #endif 
 	if(!g_swapchain){
 		g_swapchain = getDX11SwapChain();
-		if(g_swapchain)
-			g_oldPresent = (D3D11PresentHook)hookVMT(g_swapchain, 8, hookedPresent);
+		if(g_swapchain){
+			DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
+			pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
+			g_oldPresent = (D3D11PresentHook)hookVMT((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
+		}
 	}
 	if(g_swapchain){
 		WriteLog("Found SwapChain");	
@@ -181,64 +187,9 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
  
 		return processed;
 }
-  void hexDump (char *desc, void *addr, int len) {
-    int i;
-    unsigned char buff[17];
-    unsigned char *pc = (unsigned char*)addr;
-    FILE* out_file = fopen("/home/joao/Desktop/wtf.log", "a");
-
-
-    // Output description if given.
-    if (desc != NULL)
-      fprintf(out_file, "%s:\n", desc);
-
-    if (len == 0) {
-      fprintf(out_file, "  ZERO LENGTH\n");
-      return;
-    }
-    if (len < 0) {
-      fprintf(out_file, "  NEGATIVE LENGTH: %i\n",len);
-      return;
-    }
-
-    // Process every byte in the data.
-    for (i = 0; i < len; i++) {
-      // Multiple of 16 means new line (with line offset).
-
-      if ((i % 16) == 0) {
-        // Just don't print ASCII for the zeroth line.
-        if (i != 0)
-          fprintf(out_file, "  %s\n", buff);
-
-        // Output the offset.
-        fprintf(out_file, "  %04x ", i);
-      }
-
-      // Now the hex code for the specific character.
-      fprintf(out_file, " %02x", pc[i]);
-
-      // And store a printable ASCII character for later.
-      if ((pc[i] < 0x20) || (pc[i] > 0x7e))
-        buff[i % 16] = '.';
-      else
-        buff[i % 16] = pc[i];
-      buff[(i % 16) + 1] = '\0';
-    }
-
-    // Pad out last line if not exactly 16 characters.
-    while ((i % 16) != 0) {
-      fprintf(out_file, "   ");
-      i++;
-    }
-
-    // And print the final ASCII bit.
-    fprintf(out_file, "  %s\n", buff);
-    fflush(out_file);
-} 
-
 
 //based on: https://www.unknowncheats.me/forum/d3d-tutorials-and-source/88369-universal-d3d11-hook.html by evolution536
-void* DeltaBestPlugin::hookVMT(void* instance, int index, void* newFunction){
+void* DeltaBestPlugin::hookVMT(BYTE* src, BYTE* dest){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -246,10 +197,6 @@ MEMORY_BASIC_INFORMATION64 mbi = { 0 };
 #define _PTR_MAX_VALUE 0xFFE00000
 MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 #endif
-	DWORD* pVtable = (DWORD*)(*(DWORD*)instance);
-	BYTE* src = (BYTE*)(pVtable[index]);
-	hexDump("Vtable[8] CODE:", src, 16);
-
 	//for (SIZE_T addr = (SIZE_T)src; addr > (SIZE_T)src - 0x80000000; addr = (SIZE_T)mbi.BaseAddress - 1){
 	for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){	
 		/*if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi))){
@@ -259,7 +206,6 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 		if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
 			continue;
  		if(mbi.State == MEM_FREE){
-			//WriteLog("Found Free Mem");
 			if (presenthook64 = (HookContext*)VirtualAlloc((LPVOID)mbi.BaseAddress, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE)){
 					break;
 			}
@@ -277,7 +223,6 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	// ret
 	BYTE detour[] = { 0x50, 0x48, 0xB8, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0x48, 0x87, 0x04, 0x24, 0xC3 };
 	const unsigned int length = DisasmLengthCheck((SIZE_T)src, PRESENT_JUMP_LENGTH);
-	fprintf(out_file, "length = %d\n", length);
 	memcpy(presenthook64->original_code, src, length);
 	memcpy(&presenthook64->original_code[length], detour, sizeof(detour));
 	*(SIZE_T*)&presenthook64->original_code[length + 3] = (SIZE_T)src + length;
@@ -285,7 +230,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	// Build a far jump to the destination function.
 	*(WORD*)&presenthook64->far_jmp = 0x25FF;
 	*(DWORD*)(presenthook64->far_jmp + 2) = (DWORD)((SIZE_T)presenthook64 - (SIZE_T)src + FIELD_OFFSET(HookContext, dst_ptr) - 6);
-	presenthook64->dst_ptr = (SIZE_T)newFunction;
+	presenthook64->dst_ptr = (SIZE_T)dest;
  	
 	// Write the hook to the original function.
 	DWORD flOld = 0;
@@ -294,10 +239,6 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	VirtualProtect(src, 6, flOld, &flOld);
  
 	// Return a pointer to the original code.
-	hexDump("Vtable[8] CODE:", src, 16);
-	hexDump("oldPresent CODE:", presenthook64->original_code, 16);
-
-
 	return presenthook64->original_code;
 }
 

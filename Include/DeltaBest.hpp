@@ -58,7 +58,7 @@ private:
 	void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
 	void CreateInvisibleWindow(HWND* hwnd);
 	void* findInstance(void* pvReplica, DWORD dwVTable);
-	void* hookVMT(void* instance, int index, void* newFunction);
+	void* hookVMT(BYTE* src, BYTE* dest);
 
     //
     // Current status
