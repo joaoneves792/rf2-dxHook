@@ -32,7 +32,7 @@ extern "C" __declspec(dllexport)
 	PluginObjectType __cdecl GetPluginType()               { return PO_INTERNALS; }
 
 extern "C" __declspec(dllexport)
-	int __cdecl GetPluginVersion()                         { return 6; }
+	int __cdecl GetPluginVersion()                         { return 7; }
 
 extern "C" __declspec(dllexport)
 	PluginObject * __cdecl CreatePluginObject()            { return((PluginObject *) new DeltaBestPlugin); }
@@ -112,7 +112,7 @@ void DeltaBestPlugin::EnterRealtime()
 		if(g_swapchain){
 			DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
 			pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
-			g_oldPresent = (D3D11PresentHook)hookVMT((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
+			g_oldPresent = (D3D11PresentHook)placeDetour((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
 		}
 	}
 	if(g_swapchain){
@@ -189,7 +189,7 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
 }
 
 //based on: https://www.unknowncheats.me/forum/d3d-tutorials-and-source/88369-universal-d3d11-hook.html by evolution536
-void* DeltaBestPlugin::hookVMT(BYTE* src, BYTE* dest){
+void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -221,6 +221,10 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	// movabs rax, 0xCCCCCCCCCCCCCCCC
 	// xchg rax, [rsp]
 	// ret
+	// 1st calulate the size that is going to get overwritten by the jump to dest (usually 16 bytes)
+	// 2nd copy over the first bytes of the src before they are overritten to original_code
+	// 3d copy the detour code to original_code
+	// 4th copy the address of the src to the detour 0xCCCCCCCCCCCCCCCC
 	BYTE detour[] = { 0x50, 0x48, 0xB8, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0x48, 0x87, 0x04, 0x24, 0xC3 };
 	const unsigned int length = DisasmLengthCheck((SIZE_T)src, PRESENT_JUMP_LENGTH);
 	memcpy(presenthook64->original_code, src, length);
@@ -232,13 +236,13 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	*(DWORD*)(presenthook64->far_jmp + 2) = (DWORD)((SIZE_T)presenthook64 - (SIZE_T)src + FIELD_OFFSET(HookContext, dst_ptr) - 6);
 	presenthook64->dst_ptr = (SIZE_T)dest;
  	
-	// Write the hook to the original function.
+	// Write the far jump code to the src function.
 	DWORD flOld = 0;
 	VirtualProtect(src, 6, PAGE_EXECUTE_READWRITE, &flOld);
 	memcpy(src, presenthook64->far_jmp, sizeof(presenthook64->far_jmp));
 	VirtualProtect(src, 6, flOld, &flOld);
  
-	// Return a pointer to the original code.
+	// Return a pointer to the code that will jump (using detour) to the src function
 	return presenthook64->original_code;
 }
 
