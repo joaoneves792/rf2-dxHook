@@ -543,13 +543,11 @@ void DeltaBestPlugin::InitPipeline(){
 	g_d3dDevice->CreateInputLayout(ied, 1, VS->GetBufferPointer(), VS->GetBufferSize(), &g_pLayout);
 
 	WriteLog("Mapping Constant Buffer info");
-	DXGI_SWAP_CHAIN_DESC* pDesc = NULL;
-	g_swapchain->GetDesc(pDesc);
+	DXGI_SWAP_CHAIN_DESC pDesc;
+	g_swapchain->GetDesc(&pDesc);
 	g_context->Map(g_pViewportCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-	//((float*)ms.pData)[0] = (float)(pDesc->BufferDesc.Width);
-	//((float*)ms.pData)[1] = (float)(pDesc->BufferDesc.Height);
-	((float*)ms.pData)[0] = 1080.0f;
-	((float*)ms.pData)[1] = 1920.0f;
+	((float*)ms.pData)[0] = (float)(pDesc.BufferDesc.Width);
+	((float*)ms.pData)[1] = (float)(pDesc.BufferDesc.Height);
 	g_context->Unmap(g_pViewportCBuffer, NULL);
 
 
