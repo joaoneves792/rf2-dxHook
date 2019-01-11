@@ -11,7 +11,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include "DeltaBest.hpp"
 #include "semaphore_shader.h"
 #include <d3d11.h>
-#include <d3dcompiler.h>
+//#include <d3dcompiler.h>
 #include <dxgi.h>
 #include <cstdio>
 #include <string>
@@ -24,7 +24,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "d3dcompiler_43.lib")
+//#pragma comment(lib, "d3dcompiler_43.lib")
 
 
 
@@ -44,6 +44,7 @@ extern "C" __declspec(dllexport)
 
 extern "C" __declspec(dllexport)
 	void __cdecl DestroyPluginObject(PluginObject *obj)    { delete((DeltaBestPlugin *)obj); }
+
 
 #define ENABLE_LOG 1
 
@@ -71,6 +72,7 @@ namespace semaphoreDX11{
 	};
 	HookContext* presenthook64;
 
+	pD3DCompile pShaderCompiler = NULL;
 	ID3D11VertexShader *g_pVS;
 	ID3D11PixelShader *g_pPS;   
 	ID3D11InputLayout *g_pLayout;
@@ -105,10 +107,26 @@ void DeltaBestPlugin::WriteLog(const char * const msg)
 
 void DeltaBestPlugin::Load()
 {
-#ifdef ENABLE_LOG
 	WriteLog("--LOAD--");
-#endif 
-
+	//D3DCompiler is a hot mess, basically there can be different versions of the dll depending on the windows version
+	//rFactor2 is currently linked against 43, probably to support Windows 7, but that can change, so we try to find which one the
+	//game has already loaded and use that one
+#define DLL_COUNT 3
+	static const char *d3dCompilerNames[] = {"d3dcompiler_43.dll", "d3dcompiler_46.dll", "d3dcompiler_47.dll"};
+	HMODULE D3DCompilerModule = NULL;
+	size_t i = 0;
+    for (; i < DLL_COUNT; ++i){
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, d3dCompilerNames[i], &D3DCompilerModule)){
+            break;
+        }
+    }
+	if(D3DCompilerModule){
+		WriteLog("Using:");
+		WriteLog(d3dCompilerNames[i]);
+		pShaderCompiler = (pD3DCompile)GetProcAddress(D3DCompilerModule, "D3DCompile");
+	}else{
+		WriteLog("Failed to load d3dcompiler");
+	}
 }
 
 void draw(){
@@ -127,7 +145,7 @@ void draw(){
 }
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-	if(g_realtime){
+	if(g_realtime && pShaderCompiler){
 		draw();
 	}
 
@@ -463,11 +481,15 @@ void DeltaBestPlugin::InitPipeline(){
 	ID3D10Blob *pErrors;
 	std::string shader = std::string(semaphore_shader);
 	
-	D3DCompile((LPCVOID) shader.c_str(), shader.length(), NULL, NULL, NULL, "VShader", "vs_4_0", 0, 0, &VS, &pErrors);
+	if(!pShaderCompiler)
+		return;
+
+	WriteLog("Compiling shader");
+	(pShaderCompiler)((LPCVOID) shader.c_str(), shader.length(), NULL, NULL, NULL, "VShader", "vs_4_0", 0, 0, &VS, &pErrors);
 	if(pErrors)
 		WriteLog(static_cast<char*>(pErrors->GetBufferPointer()));
 
-	D3DCompile((LPCVOID) shader.c_str(), shader.length(), NULL, NULL, NULL, "PShader", "ps_4_0", 0, 0, &PS, &pErrors);
+	(pShaderCompiler)((LPCVOID) shader.c_str(), shader.length(), NULL, NULL, NULL, "PShader", "ps_4_0", 0, 0, &PS, &pErrors);
 	if(pErrors)
 		WriteLog(static_cast<char*>(pErrors->GetBufferPointer()));
 
@@ -479,7 +501,7 @@ void DeltaBestPlugin::InitPipeline(){
 
 
 
-
+	WriteLog("Creating buffers");
 	D3D11_BUFFER_DESC vbd, cbd;
 	ZeroMemory(&vbd, sizeof(vbd));
 	vbd.Usage = D3D11_USAGE_DYNAMIC;                // write access access by CPU and GPU
@@ -507,6 +529,7 @@ void DeltaBestPlugin::InitPipeline(){
 	};
 
 
+	WriteLog("Filling buffers");
 	D3D11_MAPPED_SUBRESOURCE ms;
 	g_context->Map(g_pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms);   // map the buffer
 	memcpy(ms.pData, quad_vertices, sizeof(quad_vertices));                // copy the data
@@ -516,15 +539,17 @@ void DeltaBestPlugin::InitPipeline(){
 		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
 	};
 
+	WriteLog("Setting layout of shader");
 	g_d3dDevice->CreateInputLayout(ied, 1, VS->GetBufferPointer(), VS->GetBufferSize(), &g_pLayout);
 
+	WriteLog("Mapping Constant Buffer info");
 	DXGI_SWAP_CHAIN_DESC* pDesc = NULL;
 	g_swapchain->GetDesc(pDesc);
 	g_context->Map(g_pViewportCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-	((float*)ms.pData)[0] = (float)(pDesc->BufferDesc.Width);
-	((float*)ms.pData)[1] = (float)(pDesc->BufferDesc.Height);
-	//((float*)ms.pData)[0] = 1080.0f;
-	//((float*)ms.pData)[1] = 1920.0f;
+	//((float*)ms.pData)[0] = (float)(pDesc->BufferDesc.Width);
+	//((float*)ms.pData)[1] = (float)(pDesc->BufferDesc.Height);
+	((float*)ms.pData)[0] = 1080.0f;
+	((float*)ms.pData)[1] = 1920.0f;
 	g_context->Unmap(g_pViewportCBuffer, NULL);
 
 

@@ -29,6 +29,20 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #define SAFE_RELEASE(p)      { if (p) { (p)->Release(); (p)=NULL; } }
 #endif
 
+typedef HRESULT (WINAPI *pD3DCompile)
+    (LPCVOID                         pSrcData,
+     SIZE_T                          SrcDataSize,
+     LPCSTR                          pFileName,
+     CONST D3D_SHADER_MACRO*         pDefines,
+     ID3DInclude*                    pInclude,
+     LPCSTR                          pEntrypoint,
+     LPCSTR                          pTarget,
+     UINT                            Flags1,
+     UINT                            Flags2,
+     ID3DBlob**                      ppCode,
+     ID3DBlob**                      ppErrorMsgs);
+
+
 #define PRESENT_INDEX 8
 //16 because we are 64bit
 #define PRESENT_JUMP_LENGTH 16 
