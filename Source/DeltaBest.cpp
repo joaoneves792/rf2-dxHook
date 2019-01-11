@@ -75,18 +75,8 @@ namespace semaphoreDX11{
 	ID3D11PixelShader *g_pPS;   
 	ID3D11InputLayout *g_pLayout;
 	ID3D11Buffer *g_pVBuffer;
-	const char * const semaphore_shader =
-"struct VOut{"
-"    float4 position : SV_POSITION;"
-"};"
-"VOut VShader(float4 position : POSITION){"
-"    VOut output;"
-"    output.position = position;"
-"    return output;"
-"}"
-"float4 PShader(float4 position : SV_POSITION) : SV_TARGET{"
-"    return float4(1.0, 0.0, 0.0, 0.5);"
-"}";
+	ID3D11Buffer *g_pViewportCBuffer;
+
 }
 
 using namespace semaphoreDX11;
@@ -125,6 +115,8 @@ void draw(){
 	g_context->VSSetShader(g_pVS, 0, 0);
     g_context->PSSetShader(g_pPS, 0, 0);
 	g_context->IASetInputLayout(g_pLayout);
+	g_context->PSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
+	g_context->VSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
 	// select which vertex buffer to display
     UINT stride = sizeof(float)*3;
     UINT offset = 0;
@@ -488,13 +480,20 @@ void DeltaBestPlugin::InitPipeline(){
 
 
 
-	D3D11_BUFFER_DESC vbd;
+	D3D11_BUFFER_DESC vbd, cbd;
 	ZeroMemory(&vbd, sizeof(vbd));
 	vbd.Usage = D3D11_USAGE_DYNAMIC;                // write access access by CPU and GPU
 	vbd.ByteWidth = sizeof(float) * 3 * 4;          // size is the VERTEX struct * 3
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;       // use as a vertex buffer
 	vbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
 	g_d3dDevice->CreateBuffer(&vbd, NULL, &g_pVBuffer);       // create the buffer
+
+	ZeroMemory(&cbd, sizeof(cbd));
+	cbd.Usage = D3D11_USAGE_DYNAMIC;                
+	cbd.ByteWidth = sizeof(float) * 2;
+	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
+	cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	g_d3dDevice->CreateBuffer(&cbd, NULL, &g_pViewportCBuffer);
 
 
 	float quad_vertices[] = {
@@ -518,4 +517,15 @@ void DeltaBestPlugin::InitPipeline(){
 	};
 
 	g_d3dDevice->CreateInputLayout(ied, 1, VS->GetBufferPointer(), VS->GetBufferSize(), &g_pLayout);
+
+	DXGI_SWAP_CHAIN_DESC* pDesc = NULL;
+	g_swapchain->GetDesc(pDesc);
+	g_context->Map(g_pViewportCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+	((float*)ms.pData)[0] = (float)(pDesc->BufferDesc.Width);
+	((float*)ms.pData)[1] = (float)(pDesc->BufferDesc.Height);
+	//((float*)ms.pData)[0] = 1080.0f;
+	//((float*)ms.pData)[1] = 1920.0f;
+	g_context->Unmap(g_pViewportCBuffer, NULL);
+
+
 }
