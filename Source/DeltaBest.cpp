@@ -9,9 +9,12 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 
 #include "DeltaBest.hpp"
+#include "semaphore_shader.h"
 #include <d3d11.h>
-#include <dxgi1_2.h>
+#include <d3dcompiler.h>
+#include <dxgi.h>
 #include <cstdio>
+#include <string>
 
 #define BEA_ENGINE_STATIC  /* specify the usage of a static version of BeaEngine */
 #define BEA_USE_STDCALL    /* specify the usage of a stdcall version of BeaEngine */
@@ -21,6 +24,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "d3dcompiler_43.lib")
+
 
 
 // plugin information
@@ -32,7 +37,7 @@ extern "C" __declspec(dllexport)
 	PluginObjectType __cdecl GetPluginType()               { return PO_INTERNALS; }
 
 extern "C" __declspec(dllexport)
-	int __cdecl GetPluginVersion()                         { return 7; }
+	int __cdecl GetPluginVersion()                         { return 6; }
 
 extern "C" __declspec(dllexport)
 	PluginObject * __cdecl CreatePluginObject()            { return((PluginObject *) new DeltaBestPlugin); }
@@ -65,9 +70,33 @@ namespace semaphoreDX11{
 		BYTE far_jmp[6];
 	};
 	HookContext* presenthook64;
+
+	ID3D11VertexShader *g_pVS;
+	ID3D11PixelShader *g_pPS;   
+	ID3D11InputLayout *g_pLayout;
+	ID3D11Buffer *g_pVBuffer;
+	const char * const semaphore_shader =
+"struct VOut{"
+"    float4 position : SV_POSITION;"
+"};"
+"VOut VShader(float4 position : POSITION){"
+"    VOut output;"
+"    output.position = position;"
+"    return output;"
+"}"
+"float4 PShader(float4 position : SV_POSITION) : SV_TARGET{"
+"    return float4(1.0, 0.0, 0.0, 0.5);"
+"}";
 }
 
 using namespace semaphoreDX11;
+
+DeltaBestPlugin::~DeltaBestPlugin(){
+	SAFE_RELEASE(g_pLayout)
+	SAFE_RELEASE(g_pVS)
+	SAFE_RELEASE(g_pPS)
+	SAFE_RELEASE(g_pVBuffer)
+}
 
 void DeltaBestPlugin::WriteLog(const char * const msg)
 {
@@ -92,11 +121,23 @@ void DeltaBestPlugin::Load()
 
 }
 
+void draw(){
+	g_context->VSSetShader(g_pVS, 0, 0);
+    g_context->PSSetShader(g_pPS, 0, 0);
+	g_context->IASetInputLayout(g_pLayout);
+	// select which vertex buffer to display
+    UINT stride = sizeof(float)*3;
+    UINT offset = 0;
+    g_context->IASetVertexBuffers(0, 1, &g_pVBuffer, &stride, &offset);
+    g_context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	g_context->Draw(6, 0);
+
+}
+
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-	ID3D11RenderTargetView* backbuffer;
-    FLOAT Green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
-    g_context->OMGetRenderTargets(1, &backbuffer, NULL);
-    g_context->ClearRenderTargetView(backbuffer, Green);
+	if(g_realtime){
+		draw();
+	}
 
 	return g_oldPresent(This, SyncInterval, Flags);
 }
@@ -123,6 +164,7 @@ void DeltaBestPlugin::EnterRealtime()
 			g_d3dDevice->GetImmediateContext(&g_context);
 			if(g_context){
 				WriteLog("Found Context");
+				InitPipeline();
 			}
 		}
 	}
@@ -130,7 +172,6 @@ void DeltaBestPlugin::EnterRealtime()
 		WriteLog("Failed to find dx11 resources");
 	if(g_oldPresent){
 		WriteLog("Present Hook successfull");
-		g_swapchain->Present(1, 0);
 	}else{
 		WriteLog("Unable to hook Present");
 	}
@@ -423,3 +464,58 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 
 	return pSwapChain;
  }
+
+
+void DeltaBestPlugin::InitPipeline(){
+	ID3D10Blob *VS, *PS;
+	ID3D10Blob *pErrors;
+	std::string shader = std::string(semaphore_shader);
+	
+	D3DCompile((LPCVOID) shader.c_str(), shader.length(), NULL, NULL, NULL, "VShader", "vs_4_0", 0, 0, &VS, &pErrors);
+	if(pErrors)
+		WriteLog(static_cast<char*>(pErrors->GetBufferPointer()));
+
+	D3DCompile((LPCVOID) shader.c_str(), shader.length(), NULL, NULL, NULL, "PShader", "ps_4_0", 0, 0, &PS, &pErrors);
+	if(pErrors)
+		WriteLog(static_cast<char*>(pErrors->GetBufferPointer()));
+
+	if(pErrors)
+		return;
+	
+	g_d3dDevice->CreateVertexShader(VS->GetBufferPointer(), VS->GetBufferSize(), NULL, &g_pVS);
+	g_d3dDevice->CreatePixelShader(PS->GetBufferPointer(), PS->GetBufferSize(), NULL, &g_pPS);
+
+
+
+
+	D3D11_BUFFER_DESC vbd;
+	ZeroMemory(&vbd, sizeof(vbd));
+	vbd.Usage = D3D11_USAGE_DYNAMIC;                // write access access by CPU and GPU
+	vbd.ByteWidth = sizeof(float) * 3 * 4;          // size is the VERTEX struct * 3
+	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;       // use as a vertex buffer
+	vbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
+	g_d3dDevice->CreateBuffer(&vbd, NULL, &g_pVBuffer);       // create the buffer
+
+
+	float quad_vertices[] = {
+		-1.0f, -1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f,
+		-1.0f,  1.0f, 0.0f,
+		
+		-1.0f, -1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f
+	};
+
+
+	D3D11_MAPPED_SUBRESOURCE ms;
+	g_context->Map(g_pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms);   // map the buffer
+	memcpy(ms.pData, quad_vertices, sizeof(quad_vertices));                // copy the data
+	g_context->Unmap(g_pVBuffer, NULL);
+
+	D3D11_INPUT_ELEMENT_DESC ied[] ={
+		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
+	};
+
+	g_d3dDevice->CreateInputLayout(ied, 1, VS->GetBufferPointer(), VS->GetBufferSize(), &g_pLayout);
+}

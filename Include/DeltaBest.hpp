@@ -40,7 +40,7 @@ public:
 
     // Constructor/destructor
     DeltaBestPlugin() {}
-    ~DeltaBestPlugin() {}
+	~DeltaBestPlugin();
 
 
     void EnterRealtime();
@@ -60,13 +60,9 @@ private:
 	void* findInstance(void* pvReplica, DWORD dwVTable);
 	void* placeDetour(BYTE* src, BYTE* dest);
 
-    //
-    // Current status
-    //
 
-    float mET;                          /* needed for the hardware example */
-    bool mEnabled;                      /* needed for the hardware example */
 
+    void InitPipeline();
 };
 
 inline int round(float x) { return int(floor(x + 0.5)); }
