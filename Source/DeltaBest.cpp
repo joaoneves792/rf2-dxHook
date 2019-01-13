@@ -73,7 +73,7 @@ namespace semaphoreDX11{
 	HookContext* presenthook64;
 
 	pD3DCompile pShaderCompiler = NULL;
-	ID3D11VertexShader *g_pVS;
+	ID3D11VertexShader *g_pVS = NULL;
 	ID3D11PixelShader *g_pPS;   
 	ID3D11InputLayout *g_pLayout;
 	ID3D11Buffer *g_pVBuffer;
@@ -145,7 +145,7 @@ void draw(){
 }
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-	if(g_realtime && pShaderCompiler){
+	if(g_realtime && pShaderCompiler && g_pVS){
 		draw();
 	}
 
@@ -161,23 +161,22 @@ void DeltaBestPlugin::EnterRealtime()
 	if(!g_swapchain){
 		g_swapchain = getDX11SwapChain();
 		if(g_swapchain){
+			WriteLog("Found SwapChain");
+			g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
+			if(g_d3dDevice){
+				WriteLog("Found DX11 device");
+				g_d3dDevice->GetImmediateContext(&g_context);
+				if(g_context){
+					WriteLog("Found Context");
+					//InitPipeline();
+				}
+			}
 			DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
 			pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
 			g_oldPresent = (D3D11PresentHook)placeDetour((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
 		}
 	}
-	if(g_swapchain){
-		WriteLog("Found SwapChain");	
-		g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
-		if(g_d3dDevice){
-			WriteLog("Found DX11 device");
-			g_d3dDevice->GetImmediateContext(&g_context);
-			if(g_context){
-				WriteLog("Found Context");
-				InitPipeline();
-			}
-		}
-	}
+
 	if(!g_d3dDevice || !g_swapchain || !g_context)
 		WriteLog("Failed to find dx11 resources");
 	if(g_oldPresent){
@@ -299,7 +298,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 
 
 //based on https://www.unknowncheats.me/forum/d3d-tutorials-source/121840-hook-directx-11-dynamically.html by smallC
-void* DeltaBestPlugin::findInstance(void* pvReplica, DWORD dwVTable){
+void* DeltaBestPlugin::findSwapChainInstance(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -330,7 +329,15 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 					
 			if (dwVTableAddress == dwVTable)
 			{
-				if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; }	
+				if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; }
+				__try{
+					IDXGISwapChain* sc = (IDXGISwapChain*)current;
+					ID3D11Device* dev = NULL;
+					sc->GetDevice(__uuidof(ID3D11Device), (void**)&dev);
+				}__except(1){
+					WriteLog("Found a bad pointer\n");
+					continue;
+				}
 				return ((void*)current);	
 			}
 		}
@@ -447,11 +454,7 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 
 	WriteLog("Getting window handle");
 	HWND hWnd;
-#ifdef DXVK
 	CreateInvisibleWindow(&hWnd);
-#else
-	hWnd = GetForegroundWindow();
-#endif // DXVK
 	if (hWnd == NULL){
 		WriteLog("Failed to get HWND");
 		return NULL;
@@ -467,7 +470,7 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
 	}
 	IDXGISwapChain* pSwapChain = NULL;
 	DWORD pVtable = *(DWORD*)pSearchSwapChain;
-	pSwapChain = (IDXGISwapChain*) findInstance( pSearchSwapChain, pVtable );
+	pSwapChain = (IDXGISwapChain*) findSwapChainInstance( pSearchSwapChain, pVtable );
 	if(pSwapChain)
 		WriteLog("Found Swapchain");
 	else

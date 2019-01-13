@@ -90,9 +90,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>DeltaBest</TargetName>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);E:\dev\dxsdk\Include;C:\Program Files (x86)\Microsoft SDKs\Windows\V7.0A\Include;E:\dev\msvc2012\vc\Include;</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);E:\dev\dxsdk\Lib\x86;C:\Program Files (x86)\Microsoft SDKs\Windows\V7.0A\Lib;E:\dev\msvc2012\vc\lib;</LibraryPath>
-    <ExecutablePath>$(VCInstallDir)bin;$(WindowsSdkDir)bin\NETFX 4.0 Tools;$(WindowsSdkDir)bin;$(VSInstallDir)Common7\Tools\bin;$(VSInstallDir)Common7\tools;$(VSInstallDir)Common7\ide;$(ProgramFiles)\HTML Help Workshop;$(FrameworkSDKDir)\bin;$(MSBuildToolsPath32);$(VSInstallDir);$(SystemRoot)\SysWow64;$(FxCopDir);$(PATH);$(WindowsSDK_BinPath);</ExecutablePath>
+    <IncludePath>$(ProjectDir)/../Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)/../lib;$(LibraryPath)</LibraryPath>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <TargetName>DeltaBest</TargetName>
@@ -276,12 +276,11 @@
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <OutputFile>.\Debug/$(TargetName).dll</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>.\Debug/InternalsPlugin.pdb</ProgramDatabaseFile>
       <ImportLibrary>.\Debug/InternalsPlugin.lib</ImportLibrary>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);d3dx9.lib</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
     </Link>
     <Bscmake>
       <SuppressStartupBanner>true</SuppressStartupBanner>

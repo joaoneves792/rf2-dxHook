@@ -71,7 +71,7 @@ private:
     void CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd);
 	void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
 	void CreateInvisibleWindow(HWND* hwnd);
-	void* findInstance(void* pvReplica, DWORD dwVTable);
+	void* findSwapChainInstance(void* pvReplica, DWORD dwVTable);
 	void* placeDetour(BYTE* src, BYTE* dest);
 
 

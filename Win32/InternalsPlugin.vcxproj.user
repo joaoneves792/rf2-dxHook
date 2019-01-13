@@ -4,4 +4,7 @@
     <LocalDebuggerDebuggerType>NativeOnly</LocalDebuggerDebuggerType>
     <DebuggerFlavor>WindowsRemoteDebugger</DebuggerFlavor>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LocalDebuggerDebuggerType>NativeOnly</LocalDebuggerDebuggerType>
+  </PropertyGroup>
 </Project>
