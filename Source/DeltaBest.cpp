@@ -366,25 +366,30 @@ void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceCon
 	HRESULT hr;
 	D3D_FEATURE_LEVEL FeatureLevels[] ={
                     D3D_FEATURE_LEVEL_11_0,
+					D3D_FEATURE_LEVEL_10_1,
+					D3D_FEATURE_LEVEL_10_0
 	};
     UINT NumFeatureLevels = ARRAYSIZE( FeatureLevels );
 
-    ID3D11DeviceContext* pd3dDeviceContext = NULL;
+
+	ID3D11DeviceContext* pd3dDeviceContext = NULL;
 	hr = D3D11CreateDevice(NULL,                               
 		    				D3D_DRIVER_TYPE_HARDWARE,
 							( HMODULE )0,
 							0,
-							FeatureLevels,
-							NumFeatureLevels,
+							NULL,
+							0,
 							D3D11_SDK_VERSION,
 							pDevice,
-							&FeatureLevels[0],
+							NULL,
 							pContext);
 
 	if(*pDevice)
 		WriteLog("Created device OK");
 	else{
 		WriteLog("Failed to create device");
+		fprintf(out_file, "%d\n", FeatureLevels[0]);
+		fflush(out_file);
 	}
 	
 }

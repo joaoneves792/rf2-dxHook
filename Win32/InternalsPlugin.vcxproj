@@ -103,7 +103,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>DeltaBest</TargetName>
     <ExecutablePath>$(VCInstallDir)bin\x86_amd64;$(VCInstallDir)bin;$(WindowsSdkDir)bin\NETFX 4.0 Tools;$(WindowsSdkDir)bin;$(VSInstallDir)Common7\Tools\bin;$(VSInstallDir)Common7\tools;$(VSInstallDir)Common7\ide;$(ProgramFiles)\HTML Help Workshop;$(FrameworkSDKDir)\bin;$(MSBuildToolsPath32);$(VSInstallDir);$(SystemRoot)\SysWow64;$(FxCopDir);$(PATH);$(WindowsSDK_BinPath);</ExecutablePath>
-    <LibraryPath>C:\Users\joao\Documents\Visual Studio 2012\Projects\rf2-dxHook\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(ProjectDir)/../lib;$(LibraryPath)</LibraryPath>
     <CodeAnalysisRuleSet>NativeMinimumRules.ruleset</CodeAnalysisRuleSet>
     <IncludePath>$(VCProjectDir)/../Include;$(IncludePath)</IncludePath>
   </PropertyGroup>
