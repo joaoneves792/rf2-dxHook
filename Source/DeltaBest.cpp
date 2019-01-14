@@ -21,6 +21,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <BeaEngine.h>
  
 #pragma comment(lib, "BeaEngine_s_d.lib")
+//#pragma comment(lib, "BeaEngine64.lib")
+
 
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -68,7 +70,7 @@ namespace semaphoreDX11{
 	struct HookContext{
 		BYTE original_code[64];
 		SIZE_T dst_ptr;
-		BYTE far_jmp[6];
+		BYTE near_jmp[5];
 	};
 	HookContext* presenthook64;
 
@@ -145,9 +147,9 @@ void draw(){
 }
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-	if(g_realtime && pShaderCompiler && g_pVS){
+	/*if(g_realtime && pShaderCompiler && g_pVS){
 		draw();
-	}
+	}*/
 
 	return g_oldPresent(This, SyncInterval, Flags);
 }
@@ -211,7 +213,26 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 	return false;
 }
 
+const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress){
+	DISASM disasm;
+	memset(&disasm, 0, sizeof(DISASM));
+	disasm.EIP = (UIntPtr)srcaddress;
+	disasm.Archi = 0x40;
+	Disasm(&disasm);
+	if(disasm.Instruction.BranchType == JmpType){
+		DWORD originalOffset = *((DWORD*) ( ((BYTE*)srcaddress)+1 ));
+		fprintf(out_file, "originalOffset: 0x%016x\n", originalOffset);
+	    DWORD64 hookedFunction = (DWORD64)(srcaddress+originalOffset);
+		fprintf(out_file, "hooked pointer: 0x%016x\n", hookedFunction);
+		DWORD64 newOffset = (DWORD64)(hookedFunction - detourAddress);
+		fprintf(out_file, "new offset: 0x%016x\n", newOffset);
+		fflush(out_file);
+		return newOffset;
+	}else{
+		return NULL;
+	}
 
+}
  
 const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength){
 		DISASM disasm;
@@ -228,8 +249,16 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
 			{
 				++disasm.EIP;
 			}
+			else if(disasm.Instruction.BranchType == JmpType)
+			{
+				//Bad news, someone got here first, we have a jump....
+				return -1;
+			}
 			else
 			{
+				fprintf(out_file, disasm.CompleteInstr);
+				fprintf(out_file, "\n");
+				fflush(out_file);
 				processed += len;
 				disasm.EIP += len;
 			}
@@ -238,23 +267,84 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
 		return processed;
 }
 
+/*void hexDump (char *desc, void *addr, int len) {
+    int i;
+    unsigned char buff[17];
+    unsigned char *pc = (unsigned char*)addr;
+    
+    // Output description if given.
+    if (desc != NULL)
+      fprintf(out_file, "%s:\n", desc);
+
+    if (len == 0) {
+      fprintf(out_file, "  ZERO LENGTH\n");
+      return;
+    }
+    if (len < 0) {
+      fprintf(out_file, "  NEGATIVE LENGTH: %i\n",len);
+      return;
+    }
+
+    // Process every byte in the data.
+    for (i = 0; i < len; i++) {
+      // Multiple of 16 means new line (with line offset).
+
+      if ((i % 16) == 0) {
+        // Just don't print ASCII for the zeroth line.
+        if (i != 0)
+          fprintf(out_file, "  %s\n", buff);
+
+        // Output the offset.
+        fprintf(out_file, "  %04x ", i);
+      }
+
+      // Now the hex code for the specific character.
+      fprintf(out_file, " %02x", pc[i]);
+
+      // And store a printable ASCII character for later.
+      if ((pc[i] < 0x20) || (pc[i] > 0x7e))
+        buff[i % 16] = '.';
+      else
+        buff[i % 16] = pc[i];
+      buff[(i % 16) + 1] = '\0';
+    }
+
+    // Pad out last line if not exactly 16 characters.
+    while ((i % 16) != 0) {
+      fprintf(out_file, "   ");
+      i++;
+    }
+
+    // And print the final ASCII bit.
+    fprintf(out_file, "  %s\n", buff);
+    fflush(out_file);
+}*/
+
 //based on: https://www.unknowncheats.me/forum/d3d-tutorials-and-source/88369-universal-d3d11-hook.html by evolution536
 void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
-MEMORY_BASIC_INFORMATION64 mbi = { 0 };
+//MEMORY_BASIC_INFORMATION64 mbi = { 0 };
 #else
 #define _PTR_MAX_VALUE 0xFFE00000
-MEMORY_BASIC_INFORMATION32 mbi = { 0 };
+//MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 #endif
-	//for (SIZE_T addr = (SIZE_T)src; addr > (SIZE_T)src - 0x80000000; addr = (SIZE_T)mbi.BaseAddress - 1){
-	for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){	
+
+//#define JMPLEN 6
+#define JMPLEN 5
+
+	MEMORY_BASIC_INFORMATION mbi;
+	for (SIZE_T memptr = (SIZE_T)src; memptr > (SIZE_T)src - 0x80000000; memptr = (SIZE_T)mbi.BaseAddress - 1){
+	//for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){	
 		/*if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi))){
 			    WriteLog("VirtualQuery Failed");
 				break;
 		}*/
-		if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
-			continue;
+		if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi))){
+				break;
+		}
+		/*if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
+			continue;*/
  		if(mbi.State == MEM_FREE){
 			if (presenthook64 = (HookContext*)VirtualAlloc((LPVOID)mbi.BaseAddress, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE)){
 					break;
@@ -271,27 +361,39 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	// movabs rax, 0xCCCCCCCCCCCCCCCC
 	// xchg rax, [rsp]
 	// ret
-	// 1st calulate the size that is going to get overwritten by the jump to dest (usually 16 bytes)
+	// 1st jump takes 16 bytes, so calculate how much we need to backup of the src function
 	// 2nd copy over the first bytes of the src before they are overritten to original_code
 	// 3d copy the detour code to original_code
 	// 4th copy the address of the src to the detour 0xCCCCCCCCCCCCCCCC
 	BYTE detour[] = { 0x50, 0x48, 0xB8, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0x48, 0x87, 0x04, 0x24, 0xC3 };
-	const unsigned int length = DisasmLengthCheck((SIZE_T)src, PRESENT_JUMP_LENGTH);
-	memcpy(presenthook64->original_code, src, length);
-	memcpy(&presenthook64->original_code[length], detour, sizeof(detour));
-	*(SIZE_T*)&presenthook64->original_code[length + 3] = (SIZE_T)src + length;
- 
+	const int length = DisasmLengthCheck((SIZE_T)src, PRESENT_JUMP_LENGTH);
+	if(length < 0){
+		WriteLog("Bad news, someone hooked this function already!");
+		//So we double hook it!!
+		//just place a jump to the guys who already hooked it before (Assuming near jump hook, which is not good on x64...)
+		DWORD newOffset = DisasmRecalculateOffset((SIZE_T)src, (SIZE_T)presenthook64->original_code);
+		presenthook64->original_code[0] = 0xE9;
+		memcpy(&presenthook64->original_code[1], &newOffset, sizeof(DWORD));
+	}else{
+		memcpy(presenthook64->original_code, src, length);
+		memcpy(&presenthook64->original_code[length], detour, sizeof(detour));
+		*(SIZE_T*)&presenthook64->original_code[length + 3] = (SIZE_T)src + length;
+	}
+
 	// Build a far jump to the destination function.
-	*(WORD*)&presenthook64->far_jmp = 0x25FF;
-	*(DWORD*)(presenthook64->far_jmp + 2) = (DWORD)((SIZE_T)presenthook64 - (SIZE_T)src + FIELD_OFFSET(HookContext, dst_ptr) - 6);
-	presenthook64->dst_ptr = (SIZE_T)dest;
+	//*(WORD*)&presenthook64->far_jmp = 0x25FF;
+	//*(DWORD*)(presenthook64->far_jmp + 2) = (DWORD)((SIZE_T)presenthook64 - (SIZE_T)src + FIELD_OFFSET(HookContext, dst_ptr) - 6);
+	//presenthook64->dst_ptr = (SIZE_T)dest;
+	*(WORD*)&presenthook64->near_jmp = 0xE9;	
+	*(DWORD*)(presenthook64->near_jmp + 1) = (DWORD)((SIZE_T)dest - (SIZE_T)src - JMPLEN);
+
  	
-	// Write the far jump code to the src function.
+	// Write the far/near jump code to the src function.
 	DWORD flOld = 0;
-	VirtualProtect(src, 6, PAGE_EXECUTE_READWRITE, &flOld);
-	memcpy(src, presenthook64->far_jmp, sizeof(presenthook64->far_jmp));
-	VirtualProtect(src, 6, flOld, &flOld);
- 
+	VirtualProtect(src, JMPLEN, PAGE_EXECUTE_READWRITE, &flOld);
+	memcpy(src, presenthook64->near_jmp, JMPLEN);
+	VirtualProtect(src, JMPLEN, flOld, &flOld);
+	
 	// Return a pointer to the code that will jump (using detour) to the src function
 	return presenthook64->original_code;
 }
