@@ -48,17 +48,11 @@ extern "C" __declspec(dllexport)
 	void __cdecl DestroyPluginObject(PluginObject *obj)    { delete((DeltaBestPlugin *)obj); }
 
 
-#define ENABLE_LOG 1
-
 namespace semaphoreDX11{
-	#ifdef ENABLE_LOG
 	FILE* out_file = NULL;
-	#endif
 
 	bool g_realtime = false;
 	bool g_messageDisplayed = false;
-
-	HWND g_HWND = NULL;
 
 	ID3D11Device* g_tempd3dDevice = NULL;
 	ID3D11Device* g_d3dDevice = NULL;
@@ -94,7 +88,6 @@ DeltaBestPlugin::~DeltaBestPlugin(){
 
 void DeltaBestPlugin::WriteLog(const char * const msg)
 {
-#ifdef ENABLE_LOG
 	if (out_file == NULL)
 		out_file = fopen(LOG_FILE, "a");
 
@@ -102,7 +95,6 @@ void DeltaBestPlugin::WriteLog(const char * const msg)
 		fprintf(out_file, "%s\n", msg);
 		fflush(out_file);
 	}
-#endif 
 }
 
 
@@ -157,9 +149,8 @@ HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Fl
 void DeltaBestPlugin::EnterRealtime()
 {
 	g_realtime = true;
-#ifdef ENABLE_LOG
 	WriteLog("---ENTERREALTIME---");
-#endif 
+
 	if(!g_swapchain){
 		g_swapchain = getDX11SwapChain();
 		if(g_swapchain){
@@ -193,9 +184,7 @@ void DeltaBestPlugin::ExitRealtime()
 {
 	g_realtime = false;
 	//g_messageDisplayed = false;
-#ifdef ENABLE_LOG
 	WriteLog("---EXITREALTIME---");
-#endif 
 }
 
 bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
@@ -213,7 +202,7 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 	return false;
 }
 
-const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress){
+const DWORD DeltaBestPlugin::DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress){
 	DISASM disasm;
 	memset(&disasm, 0, sizeof(DISASM));
 	disasm.EIP = (UIntPtr)srcaddress;
@@ -227,14 +216,14 @@ const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detour
 		DWORD64 newOffset = (DWORD64)(hookedFunction - detourAddress);
 		fprintf(out_file, "new offset: 0x%016x\n", newOffset);
 		fflush(out_file);
-		return newOffset;
+		return (DWORD)newOffset; //it has to fit in 32bits
 	}else{
 		return NULL;
 	}
 
 }
  
-const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength){
+const unsigned int DeltaBestPlugin::DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength){
 		DISASM disasm;
 		memset(&disasm, 0, sizeof(DISASM));
  
@@ -252,13 +241,14 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
 			else if(disasm.Instruction.BranchType == JmpType)
 			{
 				//Bad news, someone got here first, we have a jump....
+				WriteLog("Found a jump in function to detour...");
+				WriteLog(disasm.CompleteInstr);
+				hexDump("Dumping what was found in function...", (void*)address, 64);
 				return -1;
 			}
 			else
 			{
-				fprintf(out_file, disasm.CompleteInstr);
-				fprintf(out_file, "\n");
-				fflush(out_file);
+				WriteLog(disasm.CompleteInstr);
 				processed += len;
 				disasm.EIP += len;
 			}
@@ -267,7 +257,7 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
 		return processed;
 }
 
-/*void hexDump (char *desc, void *addr, int len) {
+void DeltaBestPlugin::hexDump (char *desc, void *addr, int len) {
     int i;
     unsigned char buff[17];
     unsigned char *pc = (unsigned char*)addr;
@@ -318,34 +308,26 @@ const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int ju
     // And print the final ASCII bit.
     fprintf(out_file, "  %s\n", buff);
     fflush(out_file);
-}*/
+}
 
 //based on: https://www.unknowncheats.me/forum/d3d-tutorials-and-source/88369-universal-d3d11-hook.html by evolution536
 void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
-#ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
-//MEMORY_BASIC_INFORMATION64 mbi = { 0 };
-#else
-#define _PTR_MAX_VALUE 0xFFE00000
-//MEMORY_BASIC_INFORMATION32 mbi = { 0 };
-#endif
-
 //#define JMPLEN 6
 #define JMPLEN 5
 
+#ifdef DXVK
+	MEMORY_BASIC_INFORMATION64 mbi = {0};
+	for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){	
+		if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
+			continue;
+#else
 	MEMORY_BASIC_INFORMATION mbi;
 	for (SIZE_T memptr = (SIZE_T)src; memptr > (SIZE_T)src - 0x80000000; memptr = (SIZE_T)mbi.BaseAddress - 1){
-	//for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){	
-		/*if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi))){
-			    WriteLog("VirtualQuery Failed");
+		if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi)))
 				break;
-		}*/
-		if (!VirtualQuery((LPCVOID)memptr, &mbi, sizeof(mbi))){
-				break;
-		}
-		/*if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
-			continue;*/
- 		if(mbi.State == MEM_FREE){
+#endif
+		if(mbi.State == MEM_FREE){
 			if (presenthook64 = (HookContext*)VirtualAlloc((LPVOID)mbi.BaseAddress, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE)){
 					break;
 			}
@@ -361,7 +343,7 @@ void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
 	// movabs rax, 0xCCCCCCCCCCCCCCCC
 	// xchg rax, [rsp]
 	// ret
-	// 1st jump takes 16 bytes, so calculate how much we need to backup of the src function
+	// 1st calculate how much we need to backup of the src function
 	// 2nd copy over the first bytes of the src before they are overritten to original_code
 	// 3d copy the detour code to original_code
 	// 4th copy the address of the src to the detour 0xCCCCCCCCCCCCCCCC
@@ -473,13 +455,6 @@ void DeltaBestPlugin::CreateInvisibleWindow(HWND* hwnd){
 
 void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext){
 	HRESULT hr;
-	D3D_FEATURE_LEVEL FeatureLevels[] ={
-                    D3D_FEATURE_LEVEL_11_0,
-					D3D_FEATURE_LEVEL_10_1,
-					D3D_FEATURE_LEVEL_10_0
-	};
-    UINT NumFeatureLevels = ARRAYSIZE( FeatureLevels );
-
 
 	ID3D11DeviceContext* pd3dDeviceContext = NULL;
 	hr = D3D11CreateDevice(NULL,                               
@@ -497,8 +472,6 @@ void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceCon
 		WriteLog("Created device OK");
 	else{
 		WriteLog("Failed to create device");
-		fprintf(out_file, "%d\n", FeatureLevels[0]);
-		fflush(out_file);
 	}
 	
 }
@@ -514,8 +487,6 @@ void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain
 		WriteLog("Failed to create factory1");
 		return;
 	}
-
-
 
 	DXGI_SWAP_CHAIN_DESC swapChainDesc;
 	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
@@ -536,11 +507,8 @@ void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain
 		WriteLog("Created SwapChain OK");
 	}else{
 		WriteLog("Failed to create SwapChain");
-		fprintf(out_file, "HR: %d\n", hr);
-		fflush(out_file);
 	}
 	
-
 	SAFE_RELEASE(pIDXGIFactory1)
 }
  

@@ -67,6 +67,10 @@ public:
 
 private:
     void WriteLog(const char * const msg);
+	void hexDump (char *desc, void *addr, int len);
+	const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength);
+	const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress);
+
 	IDXGISwapChain* getDX11SwapChain();
     void CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd);
 	void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
@@ -74,10 +78,6 @@ private:
 	void* findSwapChainInstance(void* pvReplica, DWORD dwVTable);
 	void* placeDetour(BYTE* src, BYTE* dest);
 
-
-
     void InitPipeline();
 };
-
-inline int round(float x) { return int(floor(x + 0.5)); }
 #endif // _INTERNALS_EXAMPLE_H
