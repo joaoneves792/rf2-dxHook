@@ -79,6 +79,28 @@ namespace semaphoreDX11{
 
 using namespace semaphoreDX11;
 
+void draw(){
+    g_context->VSSetShader(g_pVS, 0, 0);
+    g_context->PSSetShader(g_pPS, 0, 0);
+    g_context->IASetInputLayout(g_pLayout);
+    g_context->PSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
+    g_context->VSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
+    UINT stride = sizeof(float)*3;
+    UINT offset = 0;
+    g_context->IASetVertexBuffers(0, 1, &g_pVBuffer, &stride, &offset);
+    g_context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    g_context->Draw(6, 0);
+
+}
+
+HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
+    if(g_realtime && pShaderCompiler && g_pVS){
+        draw();
+    }
+    return g_oldPresent(This, SyncInterval, Flags);
+}
+
+
 DeltaBestPlugin::~DeltaBestPlugin(){
     SAFE_RELEASE(g_pLayout)
     SAFE_RELEASE(g_pVS)
@@ -98,7 +120,6 @@ void DeltaBestPlugin::WriteLog(const char * const msg)
 }
 
 
-
 void DeltaBestPlugin::Load()
 {
     WriteLog("--LOAD--");
@@ -106,78 +127,65 @@ void DeltaBestPlugin::Load()
     //rFactor2 is currently linked against 43, probably to support Windows 7, but that can change, so we try to find which one the
     //game has already loaded and use that one
 #define DLL_COUNT 3
-    static const char *d3dCompilerNames[] = {"d3dcompiler_43.dll", "d3dcompiler_46.dll", "d3dcompiler_47.dll"};
-    HMODULE D3DCompilerModule = NULL;
-    size_t i = 0;
-    for (; i < DLL_COUNT; ++i){
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, d3dCompilerNames[i], &D3DCompilerModule)){
-            break;
+    if(!pShaderCompiler){
+        static const char *d3dCompilerNames[] = {"d3dcompiler_43.dll", "d3dcompiler_46.dll", "d3dcompiler_47.dll"};
+        HMODULE D3DCompilerModule = NULL;
+        size_t i = 0;
+        for (; i < DLL_COUNT; ++i){
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, d3dCompilerNames[i], &D3DCompilerModule)){
+                break;
+            }
+        }
+        if(D3DCompilerModule){
+            WriteLog("Using:");
+            WriteLog(d3dCompilerNames[i]);
+            pShaderCompiler = (pD3DCompile)GetProcAddress(D3DCompilerModule, "D3DCompile");
+        }else{
+            WriteLog("Failed to load d3dcompiler");
         }
     }
-    if(D3DCompilerModule){
-        WriteLog("Using:");
-        WriteLog(d3dCompilerNames[i]);
-        pShaderCompiler = (pD3DCompile)GetProcAddress(D3DCompilerModule, "D3DCompile");
-    }else{
-        WriteLog("Failed to load d3dcompiler");
+
+
+	//Get a pointer to the SwapChain and Init the pipeline to draw the lights
+    if(!g_swapchain){
+		g_swapchain = getDX11SwapChain();
+		if(g_swapchain){
+			WriteLog("Found SwapChain");
+			g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
+			if(g_d3dDevice){
+				WriteLog("Found DX11 device");
+				g_d3dDevice->GetImmediateContext(&g_context);
+				if(g_context){
+					WriteLog("Found Context");
+					InitPipeline();
+				}
+			}
+			
+		}
     }
 }
 
-void draw(){
-    g_context->VSSetShader(g_pVS, 0, 0);
-    g_context->PSSetShader(g_pPS, 0, 0);
-    g_context->IASetInputLayout(g_pLayout);
-    g_context->PSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
-    g_context->VSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
-    // select which vertex buffer to display
-    UINT stride = sizeof(float)*3;
-    UINT offset = 0;
-    g_context->IASetVertexBuffers(0, 1, &g_pVBuffer, &stride, &offset);
-    g_context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    g_context->Draw(6, 0);
 
-}
-
-HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-    if(g_realtime && pShaderCompiler && g_pVS){
-        draw();
-    }
-
-    return g_oldPresent(This, SyncInterval, Flags);
-}
 
 void DeltaBestPlugin::EnterRealtime()
 {
     g_realtime = true;
     WriteLog("---ENTERREALTIME---");
 
-    if(!g_swapchain){
-        g_swapchain = getDX11SwapChain();
-        if(g_swapchain){
-            WriteLog("Found SwapChain");
-            g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
-            if(g_d3dDevice){
-                WriteLog("Found DX11 device");
-                g_d3dDevice->GetImmediateContext(&g_context);
-                if(g_context){
-                    WriteLog("Found Context");
-                    InitPipeline();
-                }
-            }
-            DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
-            pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
-            g_oldPresent = (D3D11PresentHook)placeDetour((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
+	if(!g_oldPresent){
+		//Only hook present when entering realtime to prevent things like the steam overlay from overriding our hook
+		DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
+		pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
+		g_oldPresent = (D3D11PresentHook)placeDetour((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
+		if(g_oldPresent){
+            WriteLog("Present Hook successfull");
+        }else{
+            WriteLog("Unable to hook Present");
         }
-    }
+	}
 
     if(!g_d3dDevice || !g_swapchain || !g_context)
         WriteLog("Failed to find dx11 resources");
-    if(g_oldPresent){
-        WriteLog("Present Hook successfull");
-    }else{
-        WriteLog("Unable to hook Present");
-    }
-    
 }
 
 void DeltaBestPlugin::ExitRealtime()
@@ -191,7 +199,7 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
     if(g_realtime && !g_messageDisplayed){
         
-        if(g_d3dDevice && g_swapchain && g_oldPresent){
+        if(g_d3dDevice && g_swapchain && g_oldPresent && g_pPS){
             sprintf(msgInfo.mText, "Semaphore DX11 OK");
         }else
             sprintf(msgInfo.mText, "Semaphore DX11 FAILURE");
@@ -316,7 +324,7 @@ void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
 //#define JMPLEN 6
 #define JMPLEN 5
 
-#ifdef DXVK
+#ifdef LINUX
     MEMORY_BASIC_INFORMATION64 mbi = {0};
     for (DWORD* memptr = (DWORD*)0x10000; memptr < (DWORD*)_PTR_MAX_VALUE; memptr = (DWORD*)(mbi.BaseAddress + mbi.RegionSize)){    
         if(!VirtualQuery(reinterpret_cast<LPCVOID>(memptr),reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi),sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
@@ -627,6 +635,4 @@ void DeltaBestPlugin::InitPipeline(){
     ((float*)ms.pData)[0] = (float)(pDesc.BufferDesc.Width);
     ((float*)ms.pData)[1] = (float)(pDesc.BufferDesc.Height);
     g_context->Unmap(g_pViewportCBuffer, NULL);
-
-
 }

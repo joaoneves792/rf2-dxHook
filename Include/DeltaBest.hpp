@@ -16,7 +16,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
 #define DELTA_BEST_VERSION      "v24/Nola"
-#define DXVK 1
+#define LINUX 1
 
 #if _WIN64
   #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
