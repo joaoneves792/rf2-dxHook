@@ -64,6 +64,8 @@ public:
 
 
     bool WantsToDisplayMessage(MessageInfoV01 &msgInfo);
+    bool WantsScoringUpdates() { return( true ); }      // whether we want scoring updates
+    void UpdateScoring( const ScoringInfoV01 &info );  // update plugin with scoring info (approximately five times per second)
 
 private:
     void WriteLog(const char * const msg);

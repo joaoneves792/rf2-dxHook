@@ -54,6 +54,10 @@ namespace semaphoreDX11{
     bool g_realtime = false;
     bool g_messageDisplayed = false;
 
+	bool g_inPits = false;
+	bool g_redlights = false;
+	unsigned char g_redCount = 0;
+
     ID3D11Device* g_tempd3dDevice = NULL;
     ID3D11Device* g_d3dDevice = NULL;
     IDXGISwapChain* g_swapchain = NULL;
@@ -74,17 +78,38 @@ namespace semaphoreDX11{
     ID3D11InputLayout *g_pLayout;
     ID3D11Buffer *g_pVBuffer;
     ID3D11Buffer *g_pViewportCBuffer;
+	ID3D11Buffer *g_pLightColorCBuffer;
 
 }
 
 using namespace semaphoreDX11;
 
 void draw(){
+	static bool s_yellow = true;
+	if(g_realtime){
+		if(g_inPits && !g_redlights && !s_yellow){
+			s_yellow = true;
+			D3D11_MAPPED_SUBRESOURCE ms;
+		    g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+		    ((float*)ms.pData)[0] = 1.0f;
+		    g_context->Unmap(g_pLightColorCBuffer, NULL);
+		}
+		if(s_yellow && g_redlights){
+			s_yellow = false;
+			D3D11_MAPPED_SUBRESOURCE ms;
+		    g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+		    ((float*)ms.pData)[0] = 0.0f;
+		    g_context->Unmap(g_pLightColorCBuffer, NULL);
+		}
+	}
+
     g_context->VSSetShader(g_pVS, 0, 0);
     g_context->PSSetShader(g_pPS, 0, 0);
     g_context->IASetInputLayout(g_pLayout);
     g_context->PSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
     g_context->VSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
+	g_context->PSSetConstantBuffers( 1, 1, &g_pLightColorCBuffer);
+    g_context->VSSetConstantBuffers( 1, 1, &g_pLightColorCBuffer);
     UINT stride = sizeof(float)*3;
     UINT offset = 0;
     g_context->IASetVertexBuffers(0, 1, &g_pVBuffer, &stride, &offset);
@@ -94,7 +119,8 @@ void draw(){
 }
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-    if(g_realtime && pShaderCompiler && g_pVS){
+
+	if(g_realtime && pShaderCompiler && g_pVS && (g_inPits || g_redlights)){
         draw();
     }
     return g_oldPresent(This, SyncInterval, Flags);
@@ -146,22 +172,22 @@ void DeltaBestPlugin::Load()
     }
 
 
-	//Get a pointer to the SwapChain and Init the pipeline to draw the lights
+    //Get a pointer to the SwapChain and Init the pipeline to draw the lights
     if(!g_swapchain){
-		g_swapchain = getDX11SwapChain();
-		if(g_swapchain){
-			WriteLog("Found SwapChain");
-			g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
-			if(g_d3dDevice){
-				WriteLog("Found DX11 device");
-				g_d3dDevice->GetImmediateContext(&g_context);
-				if(g_context){
-					WriteLog("Found Context");
-					InitPipeline();
-				}
-			}
-			
-		}
+        g_swapchain = getDX11SwapChain();
+        if(g_swapchain){
+            WriteLog("Found SwapChain");
+            g_swapchain->GetDevice(__uuidof(ID3D11Device), (void**)&g_d3dDevice);
+            if(g_d3dDevice){
+                WriteLog("Found DX11 device");
+                g_d3dDevice->GetImmediateContext(&g_context);
+                if(g_context){
+                    WriteLog("Found Context");
+                    InitPipeline();
+                }
+            }
+            
+        }
     }
 }
 
@@ -172,17 +198,17 @@ void DeltaBestPlugin::EnterRealtime()
     g_realtime = true;
     WriteLog("---ENTERREALTIME---");
 
-	if(!g_oldPresent){
-		//Only hook present when entering realtime to prevent things like the steam overlay from overriding our hook
-		DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
-		pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
-		g_oldPresent = (D3D11PresentHook)placeDetour((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
-		if(g_oldPresent){
+    if(!g_oldPresent){
+        //Only hook present when entering realtime to prevent things like the steam overlay from overriding our hook
+        DWORD_PTR* pSwapChainVtable = (DWORD_PTR*)g_swapchain;
+        pSwapChainVtable = (DWORD_PTR*)pSwapChainVtable[0];
+        g_oldPresent = (D3D11PresentHook)placeDetour((BYTE*)pSwapChainVtable[8], (BYTE*)hookedPresent);
+        if(g_oldPresent){
             WriteLog("Present Hook successfull");
         }else{
             WriteLog("Unable to hook Present");
         }
-	}
+    }
 
     if(!g_d3dDevice || !g_swapchain || !g_context)
         WriteLog("Failed to find dx11 resources");
@@ -193,6 +219,24 @@ void DeltaBestPlugin::ExitRealtime()
     g_realtime = false;
     //g_messageDisplayed = false;
     WriteLog("---EXITREALTIME---");
+}
+
+void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
+	if(info.mGamePhase == 0 || info.mGamePhase == 4)
+		g_redlights = true;
+	else
+		g_redlights = false;
+
+	g_redCount = info.mNumRedLights;
+
+    long numVehicles = info.mNumVehicles;
+    long i;
+	for(i = 0; i < numVehicles; i++){
+        if(info.mVehicle[i].mIsPlayer){
+			g_inPits = info.mVehicle[i].mInPits;
+            break;
+		}
+	}
 }
 
 bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
@@ -588,7 +632,7 @@ void DeltaBestPlugin::InitPipeline(){
 
 
     WriteLog("Creating buffers");
-    D3D11_BUFFER_DESC vbd, cbd;
+    D3D11_BUFFER_DESC vbd, viewport_cbd, color_cbd;
     ZeroMemory(&vbd, sizeof(vbd));
     vbd.Usage = D3D11_USAGE_DYNAMIC;                // write access access by CPU and GPU
     vbd.ByteWidth = sizeof(float) * 3 * 4;          // size is the VERTEX struct * 3
@@ -596,12 +640,19 @@ void DeltaBestPlugin::InitPipeline(){
     vbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
     g_d3dDevice->CreateBuffer(&vbd, NULL, &g_pVBuffer);       // create the buffer
 
-    ZeroMemory(&cbd, sizeof(cbd));
-    cbd.Usage = D3D11_USAGE_DYNAMIC;                
-    cbd.ByteWidth = sizeof(float) * 2;
-    cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
-    cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    g_d3dDevice->CreateBuffer(&cbd, NULL, &g_pViewportCBuffer);
+	ZeroMemory(&viewport_cbd, sizeof(viewport_cbd));
+	viewport_cbd.Usage = D3D11_USAGE_DYNAMIC;                
+    viewport_cbd.ByteWidth = sizeof(float) * 2;
+    viewport_cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
+    viewport_cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    g_d3dDevice->CreateBuffer(&viewport_cbd, NULL, &g_pViewportCBuffer);
+
+	ZeroMemory(&color_cbd, sizeof(color_cbd));
+	color_cbd.Usage = D3D11_USAGE_DYNAMIC;                
+    color_cbd.ByteWidth = sizeof(float);
+    color_cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
+    color_cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    g_d3dDevice->CreateBuffer(&color_cbd, NULL, &g_pLightColorCBuffer);
 
 
     float quad_vertices[] = {
@@ -635,4 +686,7 @@ void DeltaBestPlugin::InitPipeline(){
     ((float*)ms.pData)[0] = (float)(pDesc.BufferDesc.Width);
     ((float*)ms.pData)[1] = (float)(pDesc.BufferDesc.Height);
     g_context->Unmap(g_pViewportCBuffer, NULL);
+	g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+    ((float*)ms.pData)[0] = 0.0f;
+    g_context->Unmap(g_pLightColorCBuffer, NULL);
 }
