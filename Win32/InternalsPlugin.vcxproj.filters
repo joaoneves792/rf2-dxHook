@@ -33,7 +33,7 @@
     <ClInclude Include="..\Include\export.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="semaphore_shader.h">
+    <ClInclude Include="..\Include\semaphore_shader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -310,7 +310,7 @@
     <ClInclude Include="..\Include\export.h" />
     <ClInclude Include="..\Include\InternalsPlugin.hpp" />
     <ClInclude Include="..\Include\PluginObjects.hpp" />
-    <ClInclude Include="semaphore_shader.h" />
+    <ClInclude Include="..\Include\semaphore_shader.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

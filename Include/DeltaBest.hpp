@@ -54,29 +54,29 @@ public:
 
     // Constructor/destructor
     DeltaBestPlugin() {}
-	~DeltaBestPlugin();
+    ~DeltaBestPlugin();
 
 
     void EnterRealtime();
-	void ExitRealtime();
+    void ExitRealtime();
 
-	void Load();                   // when a new track/car is loaded
+    void Load();                   // when a new track/car is loaded
 
 
     bool WantsToDisplayMessage(MessageInfoV01 &msgInfo);
 
 private:
     void WriteLog(const char * const msg);
-	void hexDump (char *desc, void *addr, int len);
-	const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength);
-	const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress);
+    void hexDump (char *desc, void *addr, int len);
+    const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength);
+    const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress);
 
-	IDXGISwapChain* getDX11SwapChain();
+    IDXGISwapChain* getDX11SwapChain();
     void CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd);
-	void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
-	void CreateInvisibleWindow(HWND* hwnd);
-	void* findSwapChainInstance(void* pvReplica, DWORD dwVTable);
-	void* placeDetour(BYTE* src, BYTE* dest);
+    void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
+    void CreateInvisibleWindow(HWND* hwnd);
+    void* findSwapChainInstance(void* pvReplica, DWORD dwVTable);
+    void* placeDetour(BYTE* src, BYTE* dest);
 
     void InitPipeline();
 };
