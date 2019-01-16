@@ -16,7 +16,8 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 
 #define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
 #define DELTA_BEST_VERSION      "v24/Nola"
-#define LINUX 1
+#define LINUX 
+#undef LINUX
 
 #if _WIN64
   #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
@@ -46,6 +47,17 @@ typedef HRESULT (WINAPI *pD3DCompile)
 #define PRESENT_INDEX 8
 //16 because we are 64bit
 #define PRESENT_JUMP_LENGTH 16 
+
+__declspec(align(16))
+struct cbViewport{
+    float width;
+    float height;
+};
+
+__declspec(align(16))
+struct cbColor{
+    float color;
+};
 
 class DeltaBestPlugin : public InternalsPluginV06
 {

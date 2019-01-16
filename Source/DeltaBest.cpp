@@ -91,22 +91,25 @@ void draw(){
 			s_yellow = true;
 			D3D11_MAPPED_SUBRESOURCE ms;
 		    g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-		    ((float*)ms.pData)[0] = 1.0f;
+			cbColor* colorDataPtr = (cbColor*)ms.pData;
+			colorDataPtr->color = 1.0f;
 		    g_context->Unmap(g_pLightColorCBuffer, NULL);
 		}
 		if(s_yellow && g_redlights){
 			s_yellow = false;
 			D3D11_MAPPED_SUBRESOURCE ms;
 		    g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-		    ((float*)ms.pData)[0] = 0.0f;
+			cbColor* colorDataPtr = (cbColor*)ms.pData;
+			colorDataPtr->color = 0.0f;
 		    g_context->Unmap(g_pLightColorCBuffer, NULL);
 		}
 	}
 
+
     g_context->VSSetShader(g_pVS, 0, 0);
     g_context->PSSetShader(g_pPS, 0, 0);
     g_context->IASetInputLayout(g_pLayout);
-    g_context->PSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
+	g_context->PSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
     g_context->VSSetConstantBuffers( 0, 1, &g_pViewportCBuffer);
 	g_context->PSSetConstantBuffers( 1, 1, &g_pLightColorCBuffer);
     g_context->VSSetConstantBuffers( 1, 1, &g_pLightColorCBuffer);
@@ -114,14 +117,14 @@ void draw(){
     UINT offset = 0;
     g_context->IASetVertexBuffers(0, 1, &g_pVBuffer, &stride, &offset);
     g_context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		
     g_context->Draw(6, 0);
-
+	
 }
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
-
 	if(g_realtime && pShaderCompiler && g_pVS && (g_inPits || g_redlights)){
-        draw();
+		draw();
     }
     return g_oldPresent(This, SyncInterval, Flags);
 }
@@ -212,6 +215,8 @@ void DeltaBestPlugin::EnterRealtime()
 
     if(!g_d3dDevice || !g_swapchain || !g_context)
         WriteLog("Failed to find dx11 resources");
+	
+	
 }
 
 void DeltaBestPlugin::ExitRealtime()
@@ -222,11 +227,6 @@ void DeltaBestPlugin::ExitRealtime()
 }
 
 void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
-	if(info.mGamePhase == 0 || info.mGamePhase == 4)
-		g_redlights = true;
-	else
-		g_redlights = false;
-
 	g_redCount = info.mNumRedLights;
 
     long numVehicles = info.mNumVehicles;
@@ -237,6 +237,10 @@ void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
             break;
 		}
 	}
+	if(((info.mGamePhase == 0) && g_inPits) || info.mGamePhase == 4)
+		g_redlights = true;
+	else
+		g_redlights = false;
 }
 
 bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
@@ -471,7 +475,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
                     ID3D11Device* dev = NULL;
                     sc->GetDevice(__uuidof(ID3D11Device), (void**)&dev);
                 }__except(1){
-                    WriteLog("Found a bad pointer\n");
+                    WriteLog("Found a bad pointer");
                     continue;
                 }
                 return ((void*)current);    
@@ -642,14 +646,14 @@ void DeltaBestPlugin::InitPipeline(){
 
 	ZeroMemory(&viewport_cbd, sizeof(viewport_cbd));
 	viewport_cbd.Usage = D3D11_USAGE_DYNAMIC;                
-    viewport_cbd.ByteWidth = sizeof(float) * 2;
+	viewport_cbd.ByteWidth = sizeof(cbViewport);
     viewport_cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
     viewport_cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     g_d3dDevice->CreateBuffer(&viewport_cbd, NULL, &g_pViewportCBuffer);
 
 	ZeroMemory(&color_cbd, sizeof(color_cbd));
 	color_cbd.Usage = D3D11_USAGE_DYNAMIC;                
-    color_cbd.ByteWidth = sizeof(float);
+    color_cbd.ByteWidth = sizeof(cbColor);
     color_cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
     color_cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     g_d3dDevice->CreateBuffer(&color_cbd, NULL, &g_pLightColorCBuffer);
@@ -681,12 +685,14 @@ void DeltaBestPlugin::InitPipeline(){
 
     WriteLog("Mapping Constant Buffer info");
     DXGI_SWAP_CHAIN_DESC pDesc;
-    g_swapchain->GetDesc(&pDesc);
+	g_swapchain->GetDesc(&pDesc);
     g_context->Map(g_pViewportCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-    ((float*)ms.pData)[0] = (float)(pDesc.BufferDesc.Width);
-    ((float*)ms.pData)[1] = (float)(pDesc.BufferDesc.Height);
-    g_context->Unmap(g_pViewportCBuffer, NULL);
+	cbViewport* viewportDataPtr = (cbViewport*)ms.pData;
+	viewportDataPtr->width = (float)(pDesc.BufferDesc.Width);
+	viewportDataPtr->height = (float)(pDesc.BufferDesc.Height);
+	g_context->Unmap(g_pViewportCBuffer, NULL);
 	g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-    ((float*)ms.pData)[0] = 0.0f;
+	cbColor* colorDataPtr = (cbColor*)ms.pData;
+	colorDataPtr->color = 0.0f;
     g_context->Unmap(g_pLightColorCBuffer, NULL);
 }
