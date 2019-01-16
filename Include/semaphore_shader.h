@@ -22,7 +22,7 @@ const char * const semaphore_shader =
 "}\n"
 "float4 PShader(float4 position : SV_POSITION) : SV_TARGET{\n"
 "    if(position.y % 4 < 1.0 || position.x % 4 < 1.0){\n"
-"         //clip(-1);\n"
+"         clip(-1);\n"
 "         return float4(0.0, 0.0, 0.0, 0.0);\n"
 "    }\n"
 "    float sem_x[4] = {\n"
@@ -39,7 +39,7 @@ const char * const semaphore_shader =
 "                return float4(1.0, color, 0.0, 1.0);\n"
 "         }\n"
 "     }\n"
-"     //clip(-1);\n"
+"     clip(-1);\n"
 "     return float4(0.0, 0.0, 0.0, 0.0);\n"
 "}";
 //"    [unroll(4)]for(int i=0; i<4; i++){"
