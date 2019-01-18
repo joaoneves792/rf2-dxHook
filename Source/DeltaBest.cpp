@@ -124,7 +124,47 @@ void draw(){
 
 HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Flags){
 	if(g_realtime && pShaderCompiler && g_pVS && (g_inPits || g_redlights)){
-		draw();
+		ID3D11PixelShader* oldPS;
+		ID3D11VertexShader* oldVS;
+		ID3D11ClassInstance* PSclassInstances;
+		ID3D11ClassInstance* VSclassInstances;
+		UINT psCICount;
+		UINT vsCICount;
+		ID3D11Buffer* oldVertexBuffers;
+		UINT oldStrides;
+		UINT oldOffsets;
+		ID3D11InputLayout* oldLayout;
+		D3D11_PRIMITIVE_TOPOLOGY oldTopo;
+		ID3D11Buffer* oldPSConstantBuffer0;
+		ID3D11Buffer* oldVSConstantBuffer0;
+		ID3D11Buffer* oldPSConstantBuffer1;
+		ID3D11Buffer* oldVSConstantBuffer1;
+
+		//What the hell is all this crap, you may ask?
+		//Well rf2 seems to use gets to retrieve resources that were used when drawing the last frame
+		//And then attemps to use them, if we dont revert all state back to how we found it, then there will be graphical glitches
+		//Evidence of this? I found a pointer to g_PS in a trace of d3d11 calls outside of our hooked Present
+		g_context->PSGetShader(&oldPS, &PSclassInstances, &psCICount);
+		g_context->VSGetShader(&oldVS, &VSclassInstances, &vsCICount);
+		g_context->IAGetInputLayout(&oldLayout);
+		g_context->PSGetConstantBuffers(0, 1, &oldPSConstantBuffer0);
+		g_context->VSGetConstantBuffers(0, 1, &oldVSConstantBuffer0);
+		g_context->PSGetConstantBuffers(1, 1, &oldPSConstantBuffer1);
+		g_context->VSGetConstantBuffers(1, 1, &oldVSConstantBuffer1);
+		g_context->IAGetVertexBuffers(0, 1, &oldVertexBuffers, &oldStrides, &oldOffsets);
+		g_context->IAGetPrimitiveTopology(&oldTopo);
+
+		draw();//Actually do our stuff...
+
+		g_context->PSSetShader(oldPS, &PSclassInstances, psCICount);
+		g_context->VSSetShader(oldVS, &VSclassInstances, vsCICount);
+		g_context->IASetInputLayout(oldLayout);
+		g_context->PSSetConstantBuffers(0, 1, &oldPSConstantBuffer0);
+		g_context->VSSetConstantBuffers(0, 1, &oldVSConstantBuffer0);
+		g_context->PSSetConstantBuffers(1, 1, &oldPSConstantBuffer1);
+		g_context->VSSetConstantBuffers(1, 1, &oldVSConstantBuffer1);
+		g_context->IASetVertexBuffers(0, 1, &oldVertexBuffers, &oldStrides, &oldOffsets);
+		g_context->IASetPrimitiveTopology(oldTopo);
     }
     return g_oldPresent(This, SyncInterval, Flags);
 }
