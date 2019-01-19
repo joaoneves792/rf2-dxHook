@@ -79,6 +79,7 @@ namespace semaphoreDX11{
     ID3D11Buffer *g_pVBuffer;
     ID3D11Buffer *g_pViewportCBuffer;
 	ID3D11Buffer *g_pLightColorCBuffer;
+	ID3D11RasterizerState* g_rs;
 
 }
 
@@ -105,7 +106,7 @@ void draw(){
 		}
 	}
 
-
+	g_context->RSSetState(g_rs);
     g_context->VSSetShader(g_pVS, 0, 0);
     g_context->PSSetShader(g_pPS, 0, 0);
     g_context->IASetInputLayout(g_pLayout);
@@ -126,10 +127,10 @@ HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Fl
 	if(g_realtime && pShaderCompiler && g_pVS && (g_inPits || g_redlights)){
 		ID3D11PixelShader* oldPS;
 		ID3D11VertexShader* oldVS;
-		ID3D11ClassInstance* PSclassInstances;
-		ID3D11ClassInstance* VSclassInstances;
-		UINT psCICount;
-		UINT vsCICount;
+		ID3D11ClassInstance* PSclassInstances[256]; // 256 is max according to PSSetShader documentation
+		ID3D11ClassInstance* VSclassInstances[256];
+		UINT psCICount = 256;
+		UINT vsCICount = 256;
 		ID3D11Buffer* oldVertexBuffers;
 		UINT oldStrides;
 		UINT oldOffsets;
@@ -139,13 +140,15 @@ HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Fl
 		ID3D11Buffer* oldVSConstantBuffer0;
 		ID3D11Buffer* oldPSConstantBuffer1;
 		ID3D11Buffer* oldVSConstantBuffer1;
+		ID3D11RasterizerState* rs;
 
 		//What the hell is all this crap, you may ask?
 		//Well rf2 seems to use gets to retrieve resources that were used when drawing the last frame
 		//And then attemps to use them, if we dont revert all state back to how we found it, then there will be graphical glitches
 		//Evidence of this? I found a pointer to g_PS in a trace of d3d11 calls outside of our hooked Present
-		g_context->PSGetShader(&oldPS, &PSclassInstances, &psCICount);
-		g_context->VSGetShader(&oldVS, &VSclassInstances, &vsCICount);
+		g_context->RSGetState(&rs);
+		g_context->PSGetShader(&oldPS, PSclassInstances, &psCICount);
+		g_context->VSGetShader(&oldVS, VSclassInstances, &vsCICount);
 		g_context->IAGetInputLayout(&oldLayout);
 		g_context->PSGetConstantBuffers(0, 1, &oldPSConstantBuffer0);
 		g_context->VSGetConstantBuffers(0, 1, &oldVSConstantBuffer0);
@@ -156,8 +159,9 @@ HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Fl
 
 		draw();//Actually do our stuff...
 
-		g_context->PSSetShader(oldPS, &PSclassInstances, psCICount);
-		g_context->VSSetShader(oldVS, &VSclassInstances, vsCICount);
+		g_context->RSSetState(rs);
+		g_context->PSSetShader(oldPS, PSclassInstances, psCICount);
+		g_context->VSSetShader(oldVS, VSclassInstances, vsCICount);
 		g_context->IASetInputLayout(oldLayout);
 		g_context->PSSetConstantBuffers(0, 1, &oldPSConstantBuffer0);
 		g_context->VSSetConstantBuffers(0, 1, &oldVSConstantBuffer0);
@@ -735,4 +739,12 @@ void DeltaBestPlugin::InitPipeline(){
 	cbColor* colorDataPtr = (cbColor*)ms.pData;
 	colorDataPtr->color = 0.0f;
     g_context->Unmap(g_pLightColorCBuffer, NULL);
+
+	WriteLog("Creating rasterizer state");
+	D3D11_RASTERIZER_DESC rsDesc;
+	ZeroMemory(&rsDesc, sizeof(D3D11_RASTERIZER_DESC));
+	rsDesc.CullMode = D3D11_CULL_NONE;
+	rsDesc.FillMode = D3D11_FILL_SOLID;
+
+	g_d3dDevice->CreateRasterizerState(&rsDesc, &g_rs);
 }
