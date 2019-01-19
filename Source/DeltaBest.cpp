@@ -15,6 +15,7 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <dxgi.h>
 #include <cstdio>
 #include <string>
+#include <cmath>
 
 #define BEA_ENGINE_STATIC  /* specify the usage of a static version of BeaEngine */
 #define BEA_USE_STDCALL    /* specify the usage of a stdcall version of BeaEngine */
@@ -56,7 +57,8 @@ namespace semaphoreDX11{
 
 	bool g_inPits = false;
 	bool g_redlights = false;
-	unsigned char g_redCount = 0;
+	unsigned char g_redCount = 4;
+	unsigned char g_redActive = 4;
 
     ID3D11Device* g_tempd3dDevice = NULL;
     ID3D11Device* g_d3dDevice = NULL;
@@ -86,23 +88,38 @@ namespace semaphoreDX11{
 using namespace semaphoreDX11;
 
 void draw(){
+	static unsigned char active = 4;
 	static bool s_yellow = true;
 	if(g_realtime){
+		D3D11_MAPPED_SUBRESOURCE ms;
 		if(g_inPits && !g_redlights && !s_yellow){
 			s_yellow = true;
-			D3D11_MAPPED_SUBRESOURCE ms;
-		    g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-			cbColor* colorDataPtr = (cbColor*)ms.pData;
-			colorDataPtr->color = 1.0f;
-		    g_context->Unmap(g_pLightColorCBuffer, NULL);
+			g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+			cbLights* lightsDataPtr = (cbLights*)ms.pData;
+			lightsDataPtr->color = 1.0f;
+			lightsDataPtr->count = 4.0f;	
+			g_context->Unmap(g_pLightColorCBuffer, NULL);
 		}
 		if(s_yellow && g_redlights){
 			s_yellow = false;
-			D3D11_MAPPED_SUBRESOURCE ms;
-		    g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-			cbColor* colorDataPtr = (cbColor*)ms.pData;
-			colorDataPtr->color = 0.0f;
-		    g_context->Unmap(g_pLightColorCBuffer, NULL);
+			g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+			cbLights* lightsDataPtr = (cbLights*)ms.pData;
+			lightsDataPtr->color = 0.0f;
+			lightsDataPtr->count = 4.0f;	
+			g_context->Unmap(g_pLightColorCBuffer, NULL);
+		}
+		if(g_redActive != g_redCount && g_redActive != active){
+			active = g_redActive;
+			g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
+			cbLights* lightsDataPtr = (cbLights*)ms.pData;
+			lightsDataPtr->color = 0.0f;
+			lightsDataPtr->count = ceilf(((float)g_redActive/(float)g_redCount)*4.0f);
+			if(lightsDataPtr->count < 1.0f){
+				lightsDataPtr->count = 1.0f;
+			}else if(lightsDataPtr->count > 4.0f){
+				lightsDataPtr->count = 4.0f;
+			}
+			g_context->Unmap(g_pLightColorCBuffer, NULL);
 		}
 	}
 
@@ -271,9 +288,7 @@ void DeltaBestPlugin::ExitRealtime()
 }
 
 void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
-	g_redCount = info.mNumRedLights;
-
-    long numVehicles = info.mNumVehicles;
+	long numVehicles = info.mNumVehicles;
     long i;
 	for(i = 0; i < numVehicles; i++){
         if(info.mVehicle[i].mIsPlayer){
@@ -285,15 +300,23 @@ void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
 		g_redlights = true;
 	else
 		g_redlights = false;
+
+	if(g_inPits){
+		g_redCount = 4;
+		g_redActive = 4;
+	}else{
+		g_redActive = info.mStartLight;
+		g_redCount = info.mNumRedLights;
+	}
 }
 
 bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
-    if(g_realtime && !g_messageDisplayed){
+	if(g_realtime && !g_messageDisplayed){
         
-        if(g_d3dDevice && g_swapchain && g_oldPresent && g_pPS){
+        if(g_d3dDevice && g_swapchain && g_oldPresent && g_pPS)
             sprintf(msgInfo.mText, "Semaphore DX11 OK");
-        }else
+        else
             sprintf(msgInfo.mText, "Semaphore DX11 FAILURE");
 
         g_messageDisplayed = true;
@@ -697,7 +720,7 @@ void DeltaBestPlugin::InitPipeline(){
 
 	ZeroMemory(&color_cbd, sizeof(color_cbd));
 	color_cbd.Usage = D3D11_USAGE_DYNAMIC;                
-    color_cbd.ByteWidth = sizeof(cbColor);
+    color_cbd.ByteWidth = sizeof(cbLights);
     color_cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;      
     color_cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     g_d3dDevice->CreateBuffer(&color_cbd, NULL, &g_pLightColorCBuffer);
@@ -736,8 +759,9 @@ void DeltaBestPlugin::InitPipeline(){
 	viewportDataPtr->height = (float)(pDesc.BufferDesc.Height);
 	g_context->Unmap(g_pViewportCBuffer, NULL);
 	g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
-	cbColor* colorDataPtr = (cbColor*)ms.pData;
-	colorDataPtr->color = 0.0f;
+	cbLights* lightsDataPtr = (cbLights*)ms.pData;
+	lightsDataPtr->color = 0.0f;
+	lightsDataPtr->count = 4.0f;	
     g_context->Unmap(g_pLightColorCBuffer, NULL);
 
 	WriteLog("Creating rasterizer state");

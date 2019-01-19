@@ -55,8 +55,9 @@ struct cbViewport{
 };
 
 __declspec(align(16))
-struct cbColor{
+struct cbLights{
     float color;
+	float count;
 };
 
 class DeltaBestPlugin : public InternalsPluginV06
