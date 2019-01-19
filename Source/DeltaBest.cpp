@@ -201,7 +201,7 @@ DeltaBestPlugin::~DeltaBestPlugin(){
 void DeltaBestPlugin::WriteLog(const char * const msg)
 {
     if (out_file == NULL)
-        out_file = fopen(LOG_FILE, "a");
+        out_file = fopen(LOG_FILE, "w");
 
     if (out_file != NULL){
         fprintf(out_file, "%s\n", msg);
@@ -308,6 +308,7 @@ void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
 		g_redActive = info.mStartLight;
 		g_redCount = info.mNumRedLights;
 	}
+
 }
 
 bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
