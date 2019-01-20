@@ -1,10 +1,5 @@
 /*
-rF2 Delta Best Plugin
-
-Author: Cosimo Streppone <cosimo@streppone.it>
-Date:   April/May 2014
-URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
-
+rF2 Semaphore DX11
 */
 
 #ifndef _INTERNALS_EXAMPLE_H
@@ -14,15 +9,15 @@ URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFacto
 #include <d3d11.h>
 #include <dxgi1_2.h>
 
-#define PLUGIN_NAME             "rF2 Delta Best - 2017.02.25"
-#define DELTA_BEST_VERSION      "v24/Nola"
+#define PLUGIN_NAME             "rF2 SemaphoreDX11 - 2019.01.20"
+#define DELTA_BEST_VERSION      "v1"
 #define LINUX 
 #undef LINUX
 
 #if _WIN64
-  #define LOG_FILE              "Bin64\\Plugins\\DeltaBest.log"
+  #define LOG_FILE              "Bin64\\Plugins\\SemaphoreDX11.log"
 #else
-  #define LOG_FILE              "Bin32\\Plugins\\DeltaBest.log"
+  #define LOG_FILE              "Bin32\\Plugins\\SemaphoreDX11.log"
 
 #endif
 
@@ -60,14 +55,14 @@ struct cbLights{
 	float count;
 };
 
-class DeltaBestPlugin : public InternalsPluginV06
+class SemaphoreDX11Plugin : public InternalsPluginV06
 {
 
 public:
 
     // Constructor/destructor
-    DeltaBestPlugin() {}
-    ~DeltaBestPlugin();
+    SemaphoreDX11Plugin() {}
+    ~SemaphoreDX11Plugin();
 
 
     void EnterRealtime();

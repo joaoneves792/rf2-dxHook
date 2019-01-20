@@ -1,14 +1,9 @@
 /*
-rF2 Delta Best Plugin
-
-Author: Cosimo Streppone <cosimo@streppone.it>
-Date:   April/May 2014
-URL:    http://isiforums.net/f/showthread.php/19517-Delta-Best-plugin-for-rFactor-2
-
+rF2 Semaphore DX11
 */
 
 
-#include "DeltaBest.hpp"
+#include "SemaphoreDX11.hpp"
 #include "semaphore_shader.h"
 #include <d3d11.h>
 //#include <d3dcompiler.h>
@@ -43,10 +38,10 @@ extern "C" __declspec(dllexport)
     int __cdecl GetPluginVersion()                         { return 6; }
 
 extern "C" __declspec(dllexport)
-    PluginObject * __cdecl CreatePluginObject()            { return((PluginObject *) new DeltaBestPlugin); }
+    PluginObject * __cdecl CreatePluginObject()            { return((PluginObject *) new SemaphoreDX11Plugin); }
 
 extern "C" __declspec(dllexport)
-    void __cdecl DestroyPluginObject(PluginObject *obj)    { delete((DeltaBestPlugin *)obj); }
+    void __cdecl DestroyPluginObject(PluginObject *obj)    { delete((SemaphoreDX11Plugin *)obj); }
 
 
 namespace semaphoreDX11{
@@ -191,14 +186,14 @@ HRESULT __stdcall hookedPresent(IDXGISwapChain* This, UINT SyncInterval, UINT Fl
 }
 
 
-DeltaBestPlugin::~DeltaBestPlugin(){
+SemaphoreDX11Plugin::~SemaphoreDX11Plugin(){
     SAFE_RELEASE(g_pLayout)
     SAFE_RELEASE(g_pVS)
     SAFE_RELEASE(g_pPS)
     SAFE_RELEASE(g_pVBuffer)
 }
 
-void DeltaBestPlugin::WriteLog(const char * const msg)
+void SemaphoreDX11Plugin::WriteLog(const char * const msg)
 {
     if (out_file == NULL)
         out_file = fopen(LOG_FILE, "w");
@@ -210,7 +205,7 @@ void DeltaBestPlugin::WriteLog(const char * const msg)
 }
 
 
-void DeltaBestPlugin::Load()
+void SemaphoreDX11Plugin::Load()
 {
     WriteLog("--LOAD--");
     //D3DCompiler is a hot mess, basically there can be different versions of the dll depending on the windows version
@@ -257,7 +252,7 @@ void DeltaBestPlugin::Load()
 
 
 
-void DeltaBestPlugin::EnterRealtime()
+void SemaphoreDX11Plugin::EnterRealtime()
 {
     g_realtime = true;
     WriteLog("---ENTERREALTIME---");
@@ -280,14 +275,14 @@ void DeltaBestPlugin::EnterRealtime()
 	
 }
 
-void DeltaBestPlugin::ExitRealtime()
+void SemaphoreDX11Plugin::ExitRealtime()
 {
     g_realtime = false;
     //g_messageDisplayed = false;
     WriteLog("---EXITREALTIME---");
 }
 
-void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
+void SemaphoreDX11Plugin::UpdateScoring( const ScoringInfoV01 &info ){
 	long numVehicles = info.mNumVehicles;
     long i;
 	for(i = 0; i < numVehicles; i++){
@@ -311,7 +306,7 @@ void DeltaBestPlugin::UpdateScoring( const ScoringInfoV01 &info ){
 
 }
 
-bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
+bool SemaphoreDX11Plugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
 {
 	if(g_realtime && !g_messageDisplayed){
         
@@ -326,7 +321,7 @@ bool DeltaBestPlugin::WantsToDisplayMessage( MessageInfoV01 &msgInfo )
     return false;
 }
 
-const DWORD DeltaBestPlugin::DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress){
+const DWORD SemaphoreDX11Plugin::DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress){
     DISASM disasm;
     memset(&disasm, 0, sizeof(DISASM));
     disasm.EIP = (UIntPtr)srcaddress;
@@ -347,7 +342,7 @@ const DWORD DeltaBestPlugin::DisasmRecalculateOffset(const SIZE_T srcaddress, co
 
 }
  
-const unsigned int DeltaBestPlugin::DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength){
+const unsigned int SemaphoreDX11Plugin::DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength){
         DISASM disasm;
         memset(&disasm, 0, sizeof(DISASM));
  
@@ -381,7 +376,7 @@ const unsigned int DeltaBestPlugin::DisasmLengthCheck(const SIZE_T address, cons
         return processed;
 }
 
-void DeltaBestPlugin::hexDump (char *desc, void *addr, int len) {
+void SemaphoreDX11Plugin::hexDump (char *desc, void *addr, int len) {
     int i;
     unsigned char buff[17];
     unsigned char *pc = (unsigned char*)addr;
@@ -435,7 +430,7 @@ void DeltaBestPlugin::hexDump (char *desc, void *addr, int len) {
 }
 
 //based on: https://www.unknowncheats.me/forum/d3d-tutorials-and-source/88369-universal-d3d11-hook.html by evolution536
-void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
+void* SemaphoreDX11Plugin::placeDetour(BYTE* src, BYTE* dest){
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 //#define JMPLEN 6
 #define JMPLEN 5
@@ -506,7 +501,7 @@ void* DeltaBestPlugin::placeDetour(BYTE* src, BYTE* dest){
 
 
 //based on https://www.unknowncheats.me/forum/d3d-tutorials-source/121840-hook-directx-11-dynamically.html by smallC
-void* DeltaBestPlugin::findSwapChainInstance(void* pvReplica, DWORD dwVTable){
+void* SemaphoreDX11Plugin::findSwapChainInstance(void* pvReplica, DWORD dwVTable){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -554,7 +549,7 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 
 }
 
-void DeltaBestPlugin::CreateInvisibleWindow(HWND* hwnd){
+void SemaphoreDX11Plugin::CreateInvisibleWindow(HWND* hwnd){
     WNDCLASSEXW wc;
     ZeroMemory(&wc, sizeof(WNDCLASSEX));
     wc.cbSize = sizeof(WNDCLASSEX);
@@ -577,7 +572,7 @@ void DeltaBestPlugin::CreateInvisibleWindow(HWND* hwnd){
                              nullptr);
 }
 
-void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext){
+void SemaphoreDX11Plugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext){
     HRESULT hr;
 
     ID3D11DeviceContext* pd3dDeviceContext = NULL;
@@ -600,7 +595,7 @@ void DeltaBestPlugin::CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceCon
     
 }
 
-void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd){
+void SemaphoreDX11Plugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd){
     HRESULT hr;
 
     IDXGIFactory1 * pIDXGIFactory1 = NULL;
@@ -636,7 +631,7 @@ void DeltaBestPlugin::CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain
     SAFE_RELEASE(pIDXGIFactory1)
 }
  
-IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
+IDXGISwapChain* SemaphoreDX11Plugin::getDX11SwapChain(){
     IDXGISwapChain* pSearchSwapChain = NULL;    
     ID3D11Device* pDevice = NULL;
     ID3D11DeviceContext* pContext = NULL;
@@ -678,7 +673,7 @@ IDXGISwapChain* DeltaBestPlugin::getDX11SwapChain(){
  }
 
 
-void DeltaBestPlugin::InitPipeline(){
+void SemaphoreDX11Plugin::InitPipeline(){
     ID3D10Blob *VS, *PS;
     ID3D10Blob *pErrors;
     std::string shader = std::string(semaphore_shader);

@@ -21,9 +21,6 @@
     <ClInclude Include="..\Include\PluginObjects.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\DeltaBest.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\Include\basic_types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -36,9 +33,12 @@
     <ClInclude Include="..\Include\semaphore_shader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\SemaphoreDX11.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\source\DeltaBest.cpp">
+    <ClCompile Include="..\source\SemaphoreDX11.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
