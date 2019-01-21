@@ -84,10 +84,10 @@ using namespace semaphoreDX11;
 
 void draw(){
 	static unsigned char active = 4;
-	static bool s_yellow = true;
+	static bool s_yellow = false;
 	if(g_realtime){
 		D3D11_MAPPED_SUBRESOURCE ms;
-		if(g_inPits && !g_redlights && !s_yellow){
+		if(g_inPits && !s_yellow){
 			s_yellow = true;
 			g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
 			cbLights* lightsDataPtr = (cbLights*)ms.pData;
@@ -95,7 +95,7 @@ void draw(){
 			lightsDataPtr->count = 4.0f;	
 			g_context->Unmap(g_pLightColorCBuffer, NULL);
 		}
-		if(s_yellow && g_redlights){
+		if(s_yellow && !g_inPits){
 			s_yellow = false;
 			g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
 			cbLights* lightsDataPtr = (cbLights*)ms.pData;
@@ -104,11 +104,12 @@ void draw(){
 			g_context->Unmap(g_pLightColorCBuffer, NULL);
 		}
 		if(g_redActive != g_redCount && g_redActive != active){
+			s_yellow = false;
 			active = g_redActive;
 			g_context->Map(g_pLightColorCBuffer, NULL, D3D11_MAP_WRITE_DISCARD,  NULL, &ms);
 			cbLights* lightsDataPtr = (cbLights*)ms.pData;
 			lightsDataPtr->color = 0.0f;
-			lightsDataPtr->count = ceilf(((float)g_redActive/(float)g_redCount)*4.0f);
+			lightsDataPtr->count = ceilf(((float)g_redActive/(float)(g_redCount-1))*4.0f);
 			if(lightsDataPtr->count < 1.0f){
 				lightsDataPtr->count = 1.0f;
 			}else if(lightsDataPtr->count > 4.0f){
@@ -291,7 +292,7 @@ void SemaphoreDX11Plugin::UpdateScoring( const ScoringInfoV01 &info ){
             break;
 		}
 	}
-	if(((info.mGamePhase == 0) && g_inPits) || info.mGamePhase == 4)
+	if(info.mGamePhase == 4)
 		g_redlights = true;
 	else
 		g_redlights = false;
