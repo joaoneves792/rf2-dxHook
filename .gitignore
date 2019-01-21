@@ -1,5 +1,5 @@
 rF2_Delta_Best*.zip
-Win32/
-*.dll
+Win32/x64
+Win32/Release
 *.*~
 Thumbs*
