@@ -256,6 +256,7 @@ void SemaphoreDX11Plugin::Load()
 void SemaphoreDX11Plugin::EnterRealtime()
 {
     g_realtime = true;
+	g_redlights = false;
     WriteLog("---ENTERREALTIME---");
 
     if(!g_oldPresent){
@@ -279,6 +280,7 @@ void SemaphoreDX11Plugin::EnterRealtime()
 void SemaphoreDX11Plugin::ExitRealtime()
 {
     g_realtime = false;
+
     //g_messageDisplayed = false;
     WriteLog("---EXITREALTIME---");
 }
@@ -289,13 +291,15 @@ void SemaphoreDX11Plugin::UpdateScoring( const ScoringInfoV01 &info ){
 	for(i = 0; i < numVehicles; i++){
         if(info.mVehicle[i].mIsPlayer){
 			g_inPits = info.mVehicle[i].mInPits;
-            break;
+			break;
 		}
 	}
-	if(info.mGamePhase == 4)
+
+	if(info.mGamePhase == 4)			
 		g_redlights = true;
-	else
+	else 
 		g_redlights = false;
+
 
 	if(g_inPits){
 		g_redCount = 4;
@@ -377,7 +381,7 @@ const unsigned int SemaphoreDX11Plugin::DisasmLengthCheck(const SIZE_T address, 
         return processed;
 }
 
-void SemaphoreDX11Plugin::hexDump (char *desc, void *addr, int len) {
+void hexDump (char *desc, void *addr, int len) {
     int i;
     unsigned char buff[17];
     unsigned char *pc = (unsigned char*)addr;
@@ -500,9 +504,16 @@ void* SemaphoreDX11Plugin::placeDetour(BYTE* src, BYTE* dest){
     return presenthook64->original_code;
 }
 
+bool testSwapChain(DWORD* replica, DWORD* current){
+	hexDump("replica", replica, 128);
+	hexDump("current", current, 128);
+	return (replica[0] == current[0] && 
+			replica[1] == current[1] &&
+			replica[2] == current[2] );
+}
 
 //based on https://www.unknowncheats.me/forum/d3d-tutorials-source/121840-hook-directx-11-dynamically.html by smallC
-void* SemaphoreDX11Plugin::findSwapChainInstance(void* pvReplica, DWORD dwVTable){
+void* SemaphoreDX11Plugin::findInstance(void* pvReplica, DWORD dwVTable, bool (*test)(DWORD* replica, DWORD* current)){
 #ifdef _AMD64_
 #define _PTR_MAX_VALUE 0x7FFFFFFEFFFF
 MEMORY_BASIC_INFORMATION64 mbi = { 0 };
@@ -521,34 +532,28 @@ MEMORY_BASIC_INFORMATION32 mbi = { 0 };
         DWORD* len = (DWORD*)(mbi.BaseAddress + mbi.RegionSize);     //Do once
         DWORD dwVTableAddress;
         for (DWORD* current = (DWORD*)mbi.BaseAddress; current < len; ++current){                                
-            __try
-                 {
-                     dwVTableAddress  = *(DWORD*)current;
-                 }
-                 __except (1)
-                 {
-                  continue;
-                }
+            __try{
+                dwVTableAddress  = ((DWORD*)current)[0];
+            }__except (1){
+                continue;
+            }
             
                     
-            if (dwVTableAddress == dwVTable)
-            {
-                if (current == (DWORD*)pvReplica){ WriteLog("Found fake"); continue; }
-                __try{
-                    IDXGISwapChain* sc = (IDXGISwapChain*)current;
-                    ID3D11Device* dev = NULL;
-                    sc->GetDevice(__uuidof(ID3D11Device), (void**)&dev);
-                }__except(1){
-                    WriteLog("Found a bad pointer");
-                    continue;
-                }
-                return ((void*)current);    
-            }
+			if (dwVTableAddress == dwVTable){
+				if (current == (DWORD*)pvReplica){ fprintf(out_file, "Found fake\n"); fflush(out_file); continue; }
+				if(!test((DWORD*)pvReplica, current)){
+				    fprintf(out_file, "Found a bad instance\n");
+				    fflush(out_file);
+				    continue;
+				}
+				return ((void*)current);    
+           }
         }
     }
     return NULL;
 
 }
+
 
 void SemaphoreDX11Plugin::CreateInvisibleWindow(HWND* hwnd){
     WNDCLASSEXW wc;
@@ -660,7 +665,7 @@ IDXGISwapChain* SemaphoreDX11Plugin::getDX11SwapChain(){
     }
     IDXGISwapChain* pSwapChain = NULL;
     DWORD pVtable = *(DWORD*)pSearchSwapChain;
-    pSwapChain = (IDXGISwapChain*) findSwapChainInstance( pSearchSwapChain, pVtable );
+    pSwapChain = (IDXGISwapChain*) findInstance( pSearchSwapChain, pVtable, testSwapChain);
     if(pSwapChain)
         WriteLog("Found Swapchain");
     else

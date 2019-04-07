@@ -55,6 +55,8 @@ struct cbLights{
 	float count;
 };
 
+void hexDump (char *desc, void *addr, int len);
+
 class SemaphoreDX11Plugin : public InternalsPluginV06
 {
 
@@ -77,7 +79,6 @@ public:
 
 private:
     void WriteLog(const char * const msg);
-    void hexDump (char *desc, void *addr, int len);
     const unsigned int DisasmLengthCheck(const SIZE_T address, const unsigned int jumplength);
     const DWORD DisasmRecalculateOffset(const SIZE_T srcaddress, const SIZE_T detourAddress);
 
@@ -85,7 +86,7 @@ private:
     void CreateSearchSwapChain(ID3D11Device* device, IDXGISwapChain** tempSwapChain, HWND hwnd);
     void CreateSearchDevice(ID3D11Device** pDevice, ID3D11DeviceContext** pContext);
     void CreateInvisibleWindow(HWND* hwnd);
-    void* findSwapChainInstance(void* pvReplica, DWORD dwVTable);
+    void* findInstance(void* pvReplica, DWORD dwVTable, bool (*test)(DWORD* replica, DWORD* current));
     void* placeDetour(BYTE* src, BYTE* dest);
 
     void InitPipeline();
